@@ -107,9 +107,9 @@ int main (int argc, char **argv)
 	config->get_dict_db_params();
 	print_line ('=');
 	pgsql_connect* dict_db = new pgsql_connect (config->dict_db_host,
-                                                    config->dict_db_name,
-                                                    config->dict_db_user,
-                                                    config->dict_db_pass,
+						    config->dict_db_name,
+						    config->dict_db_user,
+						    config->dict_db_pass,
 						    config->dict_db_encod);
 	dict_db->connect();
 	dict_db->query("select version();");

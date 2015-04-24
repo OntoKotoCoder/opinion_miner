@@ -1,11 +1,12 @@
 #include <iostream>
 #include <string>
+#include <sstream>
 
 #include "get_parameters.h"
 
 using namespace std;
 
-get_parameters::get_parameters (char* config_file_name)
+get_parameters::get_parameters (const char* config_file_name)
 {
 	config_file = config_file_name;
 	texts_limit = 0;
@@ -35,6 +36,7 @@ void get_parameters::get_dict_db_params ()
 
 string get_parameters::get_param (string param_name)
 {
+	string param_value;
 
 	try {
 		config.readFile(config_file);
@@ -47,14 +49,17 @@ string get_parameters::get_param (string param_name)
 	}
 
 	try {
-		return config.lookup(param_name);
+		param_value = config.lookup(param_name).c_str();;
 	}
 	catch(const SettingNotFoundException &nfex) {
 		cerr << "No '" << param_name << "' setting in configuration file." << endl;
 	}
+
+	return param_value;
 }
 int get_parameters::get_int_param (string param_name)
 {
+	int param_value = 0;
 
 	try {
 		config.readFile(config_file);
@@ -67,9 +72,11 @@ int get_parameters::get_int_param (string param_name)
 	}
 
 	try {
-		return config.lookup(param_name);
+		param_value = config.lookup(param_name);
 	}
 	catch(const SettingNotFoundException &nfex) {
 		cerr << "No '" << param_name << "' setting in configuration file." << endl;
 	}
+
+	return param_value;
 }

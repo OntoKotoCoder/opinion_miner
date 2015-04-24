@@ -30,8 +30,9 @@ int main (int argc, char **argv)
 	
 	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
 	smatch result;
-
-	get_parameters* config = new get_parameters("/opt/sentiment_analysis/general.cfg");
+	
+	const char* config_path = "/opt/sentiment_analysis/general.cfg";
+	get_parameters* config = new get_parameters(config_path);
 	config->get_general_params();
 	config->get_smad_db_params();
 	
@@ -119,7 +120,7 @@ int main (int argc, char **argv)
 	dict_db->close();	
 }
 
-void print_line (int symbols_count, char symbol) 
+void print_line (size_t symbols_count, char symbol) 
 {
 	for (size_t i = 0; i < symbols_count; i ++) {
 		cout << symbol;
@@ -128,7 +129,7 @@ void print_line (int symbols_count, char symbol)
 }
 void print_line (char symbol)
 {
-	int symbols_count = atoi(getenv("COLUMNS"));
+	size_t symbols_count = atoi(getenv("COLUMNS"));
 	for (size_t i = 0; i < symbols_count; i ++) {
                 cout << symbol;
         }

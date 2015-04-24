@@ -8,7 +8,7 @@ class get_parameters
 {
 private:
 	Config config;
-	char* config_file;
+	const char* config_file;
 public:
 	// general
 	int texts_limit;
@@ -25,7 +25,7 @@ public:
 		dict_db_pass,
 		dict_db_encod;
 	
-	get_parameters (char* config_file_name);
+	get_parameters (const char* config_file_name);
 	void get_general_params ();
 	void get_smad_db_params ();
 	void get_dict_db_params ();

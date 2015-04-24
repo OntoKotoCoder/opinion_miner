@@ -1,5 +1,5 @@
 CXX ?= g++
-LIBS = -lpthread -lboost_regex -licuuc -lconfig++ -lpq  -lmysqlclient
+LIBS = -lpthread -lboost_regex -licuuc -lconfig++ -lpq -lmysqlclient
 CFLAGS = -std=c++11 -c -Wall
 
 all: connect
@@ -20,4 +20,4 @@ mysql_connect.o: mysql_connect.cpp
 	$(CXX) $(CFLAGS) mysql_connect.cpp
 
 clean:
-	rm -rf *.o connect
+	rm -rf *.o

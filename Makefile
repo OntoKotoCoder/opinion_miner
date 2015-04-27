@@ -19,5 +19,11 @@ pgsql_connect.o: pgsql_connect.cpp
 mysql_connect.o: mysql_connect.cpp
 	$(CXX) $(CFLAGS) mysql_connect.cpp
 
+install:
+	install ./connect /opt/sentiment_analysis
+
+dist:
+	tar -czf connect.tar.gz *.cpp *.h Makefile config/*
+
 clean:
 	rm -rf *.o

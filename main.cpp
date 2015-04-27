@@ -1,123 +1,56 @@
 #include <iostream>
 #include <cstdlib>
-#include <fstream>
-#include <sstream>
 
 #include <getopt.h>
 
-#include <boost/regex.hpp>
-#include <boost/regex/icu.hpp>
 #include <boost/version.hpp>
 
 #include "main.h"
-#include "get_parameters.h"
-#include "mysql_connect.h"
-#include "pgsql_connect.h"
+#include "process.h"
 
 using namespace std;
-using namespace boost;
+using namespace std;
 
 int main (int argc, char **argv) 
 {
-	string query_string;
-	string text;
-	string::const_iterator text_start;
-	string::const_iterator text_end;
-	stringstream clear_text;
-	
-	ofstream input;
-	ifstream output;
-	
-	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
-	smatch result;
-	
-	const char* config_path = "/opt/sentiment_analysis/general.cfg";
-	get_parameters* config = new get_parameters(config_path);
-	config->get_general_params();
-	config->get_smad_db_params();
-	
 	int option;
 	int option_index;
-	const char* short_options = "hl:";
+	const char* short_options = "htl:";
 	const struct option long_options[] = {
 		{"help", no_argument, nullptr, 'h'},
 		{"limit", required_argument, nullptr,'l'},
+		{"fill_texts", no_argument, nullptr, 't'},
 		{nullptr, 0, nullptr, 0}
 	};
-
+	
+	cout << "Sentiment Analysis" << endl;
+	cout << "version: 0.1" << endl;
+        
+	//get_boost_version();
+	
+	process* proc = new process();
+	
 	while ((option = getopt_long(argc, argv, short_options, long_options, &option_index)) != -1) {
 		switch(option) {
 			case 'h': {
 				get_help();
+				cout << endl;
 				break;	
 			}
 			case 'l': {
-				config->texts_limit = atoi(optarg);
+				//config->texts_limit = atoi(optarg);
 				break;		
 			}
-		}
-	}
-
-	cout << "Start programm" << endl;
-	get_boost_version();
-	mysql_connect* smad_db = new mysql_connect (config->smad_db_host,
-						    config->smad_db_name,
-						    config->smad_db_user,
-						    config->smad_db_pass);
-	if (config->texts_limit == -1)
-		query_string = "select tmp_news.text, tmp_news.myemote from tmp_news where myemote is not null;";
-	else
-		query_string = "select tmp_news.text, tmp_news.myemote from tmp_news where myemote is not null limit " + to_string(config->texts_limit) + " ;";
-
-	if (smad_db->connect() == true) {
-		smad_db->query(query_string);
-		input.open("/opt/sentiment_analysis/input");
-		while (smad_db->get_result_row() == true) {
-			text = smad_db->get_result_value(0);
-			text_start = text.begin();
-			text_end = text.end();
-			while (u32regex_search(text_start, text_end, result, u32rx)) {
-				clear_text << result[1] << " ";
-				text_start = result[1].second;		
+			case 't': {
+				cout << ">> Populate the database with texts of starting sample" << endl;
+				print_line('='); 
+				proc->get_texts_with_emotion();
+				print_line('=');
+				cout << "Finished!" << endl << endl;
+				break;
 			}
-			input << clear_text.str() << endl << endl;
-			clear_text.str("");
-		}
-		input.close();
-		smad_db->delete_results();
-		smad_db->close();
-		system("mystem -cwld /opt/sentiment_analysis/input /opt/sentiment_analysis/output");
-	}
-	
-	cout << ">> Stem texts:" << endl;
-	output.open("/opt/sentiment_analysis/output");
-	while (getline(output, text)) {
-		if (text != nullptr) {
-			text_start = text.begin();
-                	text_end = text.end();
-			while (u32regex_search(text_start, text_end, result, u32rx)) {
-				clear_text << result[1] << " ";
-				text_start = result[1].second;
-			}
-			cout << clear_text.str() << endl << endl;
-			clear_text.str("");
 		}
 	}
-
-	cout << "Test PostgreSQL connection" << endl;
-	config->get_dict_db_params();
-	print_line ('=');
-	pgsql_connect* dict_db = new pgsql_connect (config->dict_db_host,
-						    config->dict_db_name,
-						    config->dict_db_user,
-						    config->dict_db_pass,
-						    config->dict_db_encod);
-	dict_db->connect();
-	dict_db->query("select version();");
-	cout << "Query result:" << endl;
-	cout << dict_db->get_value(0, 0) << endl;
-	dict_db->delete_result();
-	dict_db->close();	
 }
 
 void print_line (size_t symbols_count, char symbol) 
@@ -145,9 +78,11 @@ void get_boost_version ()
 }
 void get_help ()
 {
-	cout << "Sentiment analysis:" << endl;
+	system("export COLUMNS");
+	cout << "О программе:" << endl;
 	print_line('=');
-	cout << " -l : определяет кол-во текстов забираемых из базы данных СМАД" << endl
+	cout << " -t : опция инициализирует заполнение базы данных текстами начальной выборки" << endl
+	     << " -l : определяет кол-во текстов забираемых из базы данных СМАД" << endl
 	     << " -h : выводит информацию о программе" << endl
 	     << " конфигурационный файл: /opt/sentiment_analysis/general.cfg" << endl;
 	print_line('=');

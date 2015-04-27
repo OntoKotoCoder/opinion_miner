@@ -27,6 +27,6 @@ public:
 	void query (string query_string);
 	bool get_result_row ();
 	string get_result_value (int value_ind);
-	void delete_results ();
+	void delete_result ();
 	void close ();
 };

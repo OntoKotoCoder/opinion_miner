@@ -58,7 +58,7 @@ string mysql_connect::get_result_value (int value_index)
 	return string_value.str();
 }
 
-void mysql_connect::delete_results ()
+void mysql_connect::delete_result ()
 {
 	mysql_free_result(result);
 }

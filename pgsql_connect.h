@@ -1,4 +1,5 @@
 #include <string>
+#include <fstream>
 
 #include "postgresql/libpq-fe.h"
 
@@ -13,6 +14,8 @@ private:
 	string  db_params,
 		db_name,
 		db_host;
+
+	ofstream log_file;
 public:
 	bool connect_error;
         bool query_error;
@@ -21,7 +24,7 @@ public:
 			string new_db_user, string new_db_pass,
 			string new_db_encod );
 
-	void connect ();
+	bool connect ();
 	void query (string query_string);
 	string get_value (int i, int j);
 	int get_int_value (int i, int j);

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <string>
+#include <sstream>
 
 #include "pgsql_connect.h"
 
@@ -17,16 +18,19 @@ pgsql_connect::pgsql_connect (string new_db_host, string new_db_name,
 		    " client_encoding = " + new_db_encod;
 	db_host = new_db_host;
 	db_name = new_db_name;
+	log_file.open("/var/log/sentiment_analysis/query_log.txt", fstream::app);
 }
 
-void pgsql_connect::connect ()
+bool pgsql_connect::connect ()
 {
 	conn = PQconnectdb(&db_params[0]);
 	if (PQstatus(conn) != CONNECTION_OK) {
 		cout << "PGSQL ERROR: " << PQerrorMessage(conn) << endl;
+		return false;
 	}
 	else {
 		cout << "PGSQL: Connection to '" << db_host << "@" << db_name << "' established" << endl;
+		return true;
 	}
 }
 
@@ -36,6 +40,7 @@ void pgsql_connect::query (string query_string)
 	query_result = PQexec(conn, &query_string[0]);
 	if (PQresultStatus(query_result) != PGRES_TUPLES_OK) {
 		query_error = true;
+		log_file << query_string << endl;
 	}
 }
 
@@ -70,11 +75,14 @@ void pgsql_connect::clear_table (string table_name)
 	string query_string = "TRUNCATE TABLE " + table_name + ";";
 	query_result = PQexec(conn, &query_string[0]);
 	
-	if (PQresultStatus(query_result) != PGRES_TUPLES_OK) {
-		cout << "PGSQL ERROR: " << PQerrorMessage(conn) << endl;	
+	stringstream error_message;
+	error_message << PQerrorMessage(conn);	
+	
+	if (error_message.str() != "") {
+		cout << "PGSQL: " << error_message.str();	
 	}
 	else {
-		cout << "PGSQL: " << "Из " << db_name << "/" << table_name << " удалены все записи";
+		cout << "PGSQL: " << "Removed from '" << db_name << "/" << table_name << "' all entries" << endl;
 	}
 }
 

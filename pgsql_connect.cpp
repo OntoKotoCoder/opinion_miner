@@ -18,7 +18,7 @@ pgsql_connect::pgsql_connect (string new_db_host, string new_db_name,
 		    " client_encoding = " + new_db_encod;
 	db_host = new_db_host;
 	db_name = new_db_name;
-	log_file.open("/var/log/sentiment_analysis/query_log.txt", fstream::app);
+	log_file.open("/var/log/sentiment_analysis/query_log", fstream::app);
 }
 
 bool pgsql_connect::connect ()
@@ -38,9 +38,13 @@ void pgsql_connect::query (string query_string)
 {
 	query_error = false;
 	query_result = PQexec(conn, &query_string[0]);
-	if (PQresultStatus(query_result) != PGRES_TUPLES_OK) {
+
+	stringstream error_message;
+        error_message << PQerrorMessage(conn);
+
+	if (error_message.str() != "") {
 		query_error = true;
-		log_file << query_string << endl;
+		log_file << error_message.str() << endl;
 	}
 }
 
@@ -84,6 +88,22 @@ void pgsql_connect::clear_table (string table_name)
 	else {
 		cout << "PGSQL: " << "Removed from '" << db_name << "/" << table_name << "' all entries" << endl;
 	}
+}
+
+void pgsql_connect::set_to_zero (string sequence_name)
+{
+	string query_string = "SELECT pg_catalog.setval('" + sequence_name +"', 0, true);";
+	query_result = PQexec(conn, &query_string[0]);
+
+	stringstream error_message;
+        error_message << PQerrorMessage(conn);
+
+        if (error_message.str() != "") {
+                cout << "PGSQL: " << error_message.str();
+        }
+        else {
+                cout << "PGSQL: " << "Sequence '" << sequence_name << "' set by 1" << endl;
+        }
 }
 
 int pgsql_connect::table_size (string table_name)

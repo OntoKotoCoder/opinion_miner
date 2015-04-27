@@ -53,6 +53,7 @@ void process::get_texts_with_emotion ()
 	if (smad_db->connect() == true && dict_db->connect() == true) {
 		// Очищаем таблицу с текстами
 		dict_db->clear_table("texts");
+		dict_db->set_to_zero("texts_text_id_seq");
 		dict_db->delete_result();
 		// Забираем из базы данных СМАД'а все тексты с эмоциональной тональностью
 		query_string = "select tmp_news.text, tmp_news.myemote, tmp_news.guid from tmp_news where myemote is not null;";
@@ -106,8 +107,8 @@ void process::get_texts_with_emotion ()
                                 clear_text << result[1] << " ";
                                 text_start = result[1].second;
                         }
-			query_string += "INSERT INTO texts (mystem_text) VALUES ('" 
-					+ clear_text.str() + "') WHERE text_id = " + to_string(i) + ";\n";
+			query_string += "UPDATE texts SET mystem_text = '" 
+					+ clear_text.str() + "' WHERE text_id = " + to_string(i) + ";\n";
 			clear_text.str("");
 			cout << "\rInserted mystem texts to database: " << i;
 		}

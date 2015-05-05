@@ -36,4 +36,7 @@ public:
 	void clear_table (string table_name);
 	void set_to_zero (string sequence_name);
 	int table_size (string table_name);
+
+private:
+	string get_time();
 };

@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <string>
 #include <sstream>
+#include <ctime>
 
 #include "pgsql_connect.h"
 
@@ -16,8 +17,10 @@ pgsql_connect::pgsql_connect (string new_db_host, string new_db_name,
 		    " user = " + new_db_user +
 		    " password = " + new_db_pass +
 		    " client_encoding = " + new_db_encod;
+	
 	db_host = new_db_host;
 	db_name = new_db_name;
+	
 	log_file.open("/var/log/sentiment_analysis/query_log", fstream::app);
 }
 
@@ -44,7 +47,7 @@ void pgsql_connect::query (string query_string)
 
 	if (error_message.str() != "") {
 		query_error = true;
-		log_file << error_message.str() << endl;
+		log_file << get_time() << " " << error_message.str() << endl;
 	}
 }
 
@@ -108,9 +111,28 @@ void pgsql_connect::set_to_zero (string sequence_name)
 
 int pgsql_connect::table_size (string table_name)
 {
+	int size = 0;
 	string query_string = "SELECT COUNT(*) FROM " + table_name + ";";
 	query_result = PQexec(conn, &query_string[0]);
 
-	return atoi(PQgetvalue(query_result, 0, 0));
+	size = atoi(PQgetvalue(query_result, 0, 0));
+	PQclear(query_result);
+	
+	return size;
+}
 
+string pgsql_connect::get_time ()
+{
+	time_t now = time(0);
+	tm *ltm = localtime(&now);
+	stringstream log_time;
+	log_time << "[" <<
+		    ltm->tm_mday << "/" <<
+		    1 + ltm->tm_mon << "/" <<
+		    1900 + ltm->tm_year << ":" <<
+		    1 + ltm->tm_hour << ":" <<
+		    1 + ltm->tm_min << ":" <<
+		    1 + ltm->tm_sec <<
+		    "]";
+	return log_time.str();
 }

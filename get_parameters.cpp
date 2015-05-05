@@ -15,6 +15,10 @@ get_parameters::get_parameters (const char* config_file_name)
 void get_parameters::get_general_params () 
 {
 	texts_limit = get_int_param("general.texts_limit");
+	n_gramm_size = get_int_param("general.n-gramm_size");
+	number_of_classes = get_int_param("general.number_of_classes");
+	use_tf = get_bool_param("general.calculate_with_tf");
+	v_space_file_name = get_param("general.vector_space_file");
 }
 
 void get_parameters::get_smad_db_params () 
@@ -49,7 +53,7 @@ string get_parameters::get_param (string param_name)
 	}
 
 	try {
-		param_value = config.lookup(param_name).c_str();;
+		param_value = config.lookup(param_name).c_str();
 	}
 	catch(const SettingNotFoundException &nfex) {
 		cerr << "No '" << param_name << "' setting in configuration file." << endl;
@@ -57,6 +61,7 @@ string get_parameters::get_param (string param_name)
 
 	return param_value;
 }
+
 int get_parameters::get_int_param (string param_name)
 {
 	int param_value = 0;
@@ -80,3 +85,27 @@ int get_parameters::get_int_param (string param_name)
 
 	return param_value;
 }
+bool get_parameters::get_bool_param (string param_name)
+{
+	bool param_value = false;
+
+	try {
+		config.readFile(config_file);
+	}
+	catch (const FileIOException &fioex) {
+		cerr << "I/O error while reading file." << endl;
+	}
+	catch (const ParseException &pex) {
+		cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine() << " - " << pex.getError() << endl;
+	}
+
+	try {
+		param_value = config.lookup(param_name);
+	}
+	catch(const SettingNotFoundException &nfex) {
+		cerr << "No '" << param_name << "' setting in configuration file." << endl;
+	}
+
+	return param_value;
+}
+

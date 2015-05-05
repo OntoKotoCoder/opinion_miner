@@ -12,6 +12,10 @@ private:
 public:
 	// general
 	int texts_limit;
+	int n_gramm_size;
+	int number_of_classes;
+	bool use_tf;
+	string v_space_file_name;
 
 	// smad db
 	string 	smad_db_host,
@@ -33,4 +37,5 @@ public:
 private:
 	string get_param (string param_name);
 	int get_int_param (string param_name);
+	bool get_bool_param (string param_name);
 };

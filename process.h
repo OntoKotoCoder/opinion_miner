@@ -9,8 +9,11 @@ private:
 public:
 
 	process ();
+	void fill_db_with_training_set();
+	void fill_db_with_n_gramms();
+	void calculate_idf();
+	void calculate_vector_space();
 
-	void get_texts_with_emotion ();
-	void perform_pretreat_texts ();
-	void perform_mystem_texts ();
+private:
+	void print_progress(char completed_symbol, char not_completed_symbol, int completed_count, int progress_length);
 };

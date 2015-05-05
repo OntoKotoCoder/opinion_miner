@@ -15,17 +15,19 @@ int main (int argc, char **argv)
 {
 	int option;
 	int option_index;
-	const char* short_options = "htl:";
+	const char* short_options = "htnvl:";
 	const struct option long_options[] = {
 		{"help", no_argument, nullptr, 'h'},
 		{"limit", required_argument, nullptr,'l'},
 		{"fill_texts", no_argument, nullptr, 't'},
+		{"fill_n_gramms", no_argument, nullptr, 'n'},
+		{"calc_vector", no_argument, nullptr, 'v'},
 		{nullptr, 0, nullptr, 0}
 	};
 	
 	cout << "Sentiment Analysis" << endl;
-	cout << "version: 0.1" << endl;
-        
+	cout << "Version: 0.1" << endl;
+	system("export COLUMNS"); 
 	//get_boost_version();
 	
 	process* proc = new process();
@@ -44,7 +46,23 @@ int main (int argc, char **argv)
 			case 't': {
 				cout << ">> Populate the database with texts of starting sample" << endl;
 				print_line('='); 
-				proc->get_texts_with_emotion();
+				proc->fill_db_with_training_set();
+				print_line('=');
+				cout << "Finished!" << endl << endl;
+				break;
+			}
+			case 'n': {
+				cout << ">> Populate the database with n_gramms" << endl;
+				print_line('=');
+				proc->fill_db_with_n_gramms();
+				print_line('=');
+				cout << "Finished!" << endl << endl;
+				break;
+			}
+			case 'v': {
+				cout << ">> Calculate vector space" << endl;
+				print_line('=');
+				proc->calculate_vector_space();
 				print_line('=');
 				cout << "Finished!" << endl << endl;
 				break;

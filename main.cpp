@@ -15,13 +15,15 @@ int main (int argc, char **argv)
 {
 	int option;
 	int option_index;
-	const char* short_options = "htnvl:";
+	const char* short_options = "htnvspl:";
 	const struct option long_options[] = {
 		{"help", no_argument, nullptr, 'h'},
 		{"limit", required_argument, nullptr,'l'},
 		{"fill_texts", no_argument, nullptr, 't'},
 		{"fill_n_gramms", no_argument, nullptr, 'n'},
 		{"calc_vector", no_argument, nullptr, 'v'},
+		{"svm_train", no_argument, nullptr, 's'},
+		{"svm_predict", no_argument, nullptr, 'p'},
 		{nullptr, 0, nullptr, 0}
 	};
 	
@@ -63,6 +65,22 @@ int main (int argc, char **argv)
 				cout << ">> Calculate vector space" << endl;
 				print_line('=');
 				proc->calculate_vector_space();
+				print_line('=');
+				cout << "Finished!" << endl << endl;
+				break;
+			}
+			case 's': {
+				cout << ">> Start SVM train" << endl;
+				print_line('=');
+				proc->start_svm_train();
+				print_line('=');
+				cout << "Finished!" << endl << endl;
+				break;
+			}
+			case 'p': {
+				cout << ">> Start SVM predict" << endl;
+				print_line('=');
+				proc->start_svm_predict();
 				print_line('=');
 				cout << "Finished!" << endl << endl;
 				break;

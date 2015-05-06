@@ -45,6 +45,7 @@ void get_parameters::get_svm_params()
 {
 	svm_type = svm_types[get_param("svm.svm_type")];
 	kernel_type = kernel_types[get_param("svm.kernel_type")];
+	nu = get_double_param("svm.nu");
 }
 
 string get_parameters::get_param (string param_name)
@@ -94,6 +95,31 @@ int get_parameters::get_int_param (string param_name)
 
 	return param_value;
 }
+
+double get_parameters::get_double_param (string param_name)
+{
+	double param_value = 0;
+
+	try {
+		config.readFile(config_file);
+	}
+	catch (const FileIOException &fioex) {
+		cerr << "I/O error while reading file." << endl;
+	}
+	catch (const ParseException &pex) {
+		cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine() << " - " << pex.getError() << endl;
+	}
+
+	try {
+		param_value = config.lookup(param_name);
+	}
+	catch(const SettingNotFoundException &nfex) {
+		cerr << "No '" << param_name << "' setting in configuration file." << endl;
+	}
+
+	return param_value;
+}
+
 bool get_parameters::get_bool_param (string param_name)
 {
 	bool param_value = false;

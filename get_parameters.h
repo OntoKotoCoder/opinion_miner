@@ -32,13 +32,18 @@ public:
 		dict_db_user,
 		dict_db_pass,
 		dict_db_encod;
-
+	
+	//////////////////////////////////////////////////
+	//		SVM parameters			//
+	//////////////////////////////////////////////////		
 	int svm_type,
 	    kernel_type;
 	enum svms {C_SVC, NU_SVC};
 	enum kernels {LINEAR, POLY, RBF, SIGMOID};
 	unordered_map<string, enum svms> svm_types;
 	unordered_map<string, enum kernels> kernel_types;
+	unsigned int C;
+	double nu;
 	
 	get_parameters (const char* config_file_name);
 	void get_general_params ();
@@ -49,5 +54,6 @@ public:
 private:
 	string get_param (string param_name);
 	int get_int_param (string param_name);
+	double get_double_param (string param_name);
 	bool get_bool_param (string param_name);
 };

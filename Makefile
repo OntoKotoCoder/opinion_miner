@@ -1,11 +1,16 @@
 CXX ?= g++
 LIBS = -lpthread -lboost_regex -licuuc -lconfig++ -lpq -lmysqlclient
+ALIBS = -Lsvm -lsvm
 CFLAGS = -std=c++11 -c -Wall
+SHARED_LIB_FLAG = -shared -o libsvm.so.2 svm/svm.cpp
 
 all: connect
 
 connect: main.o get_parameters.o pgsql_connect.o mysql_connect.o process.o
-	$(CXX) $(LIBS) main.o get_parameters.o pgsql_connect.o mysql_connect.o process.o -o connect
+	$(CXX) $(LIBS) $(ALIBS) main.o get_parameters.o pgsql_connect.o mysql_connect.o process.o -o connect
+
+lib: svm/svm.cpp
+	$(CXX) -shared -o libsvm.so.2 svm/svm.cpp
 
 main.o: main.cpp
 	$(CXX) $(CFLAGS) main.cpp

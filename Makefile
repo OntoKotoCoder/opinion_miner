@@ -7,7 +7,7 @@ SHARED_LIB_FLAG = -shared -o libsvm.so.2 svm/svm.cpp
 all: connect
 
 connect: main.o get_parameters.o pgsql_connect.o mysql_connect.o process.o
-	$(CXX) $(LIBS) $(ALIBS) main.o get_parameters.o pgsql_connect.o mysql_connect.o process.o -o connect
+	$(CXX) $(LIBS) $(ALIBS) main.o get_parameters.o pgsql_connect.o mysql_connect.o process.o -o opinion_miner
 
 lib: svm/svm.cpp
 	$(CXX) -shared -o libsvm.so.2 svm/svm.cpp

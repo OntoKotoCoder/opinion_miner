@@ -3,13 +3,13 @@
 #include "get_parameters.h"
 #include "svm/svm.h"
 
+extern get_parameters* config;
+
 class process
 {
 private:
 
 public:
-	get_parameters* config;
-
 	process ();
 	void fill_db_with_training_set();
 	void fill_db_with_n_gramms();

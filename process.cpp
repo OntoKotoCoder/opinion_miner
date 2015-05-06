@@ -22,12 +22,7 @@ unsigned int progress_length = 30;
 
 process::process ()
 {
-	const char* config_path = "/opt/sentiment_analysis/general.cfg";
-        config = new get_parameters(config_path);
-	config->get_general_params();
-	config->get_smad_db_params();
-	config->get_dict_db_params();
-        config->get_svm_params();
+
 }
 
 void process::fill_db_with_training_set()
@@ -525,7 +520,8 @@ void process::read_v_space_file(string v_space_file_name)
 			printf("\rProcessed vectros from data file: %d/%d", (i + 1), prob.l);
 		}
 		system("tput cnorm");
-
+		cout << endl << "Write model to file: " << config->model_file_name << endl;
+		cout << "Class count : " << config->number_of_classes << endl;
 		if (param.gamma == 0 && max_index > 0)
 			param.gamma = 1.0 / max_index;
 
@@ -559,7 +555,7 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 	v_space_file.open(v_space_file_name);
 	result_file.open(result_file_name);
 
-	cout << "Get vector space from file: " << v_space_file_name << endl;
+	cout << " Get vector space from file: " << v_space_file_name << endl;
 	cout << "	Get model from file: " << config->model_file_name << endl;
 
 	size_t texts_count = 0;
@@ -569,7 +565,6 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 	v_space_file.close(); v_space_file.open(v_space_file_name);
 
 	double one_element = (double)progress_length / (double)texts_count;
-	cout << (one_element * 435) << endl;
 	// Выключим курсор что бы не моргал	
 	system("tput civis");
 	cout << "\nProcessed texts:\n";
@@ -699,6 +694,7 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 		F_average = (F_positive + F_negative) / 2;
 		A = (TP + TN) / (TP + FN + FP + TN);
 		cout << "Results:\n";
+		cout << "---------------------------";
 		cout << "\nPrecision positive: " << P_positive; results << "Precision positive;" << P_positive << endl;
 		cout << "\nPrecision negative: " << P_negative; results << "Precision negative;" << P_negative << endl;
 		cout << "\n Precision average: " << P_average; results << "Precision average;" << P_average << endl;
@@ -721,7 +717,7 @@ void process::get_svm_parameters()
 	param.degree = 3;
 	param.gamma = 0;
 	param.coef0 = 0;
-	param.nu = 0.5;
+	param.nu = config->nu;
 	param.cache_size = 100;
 	param.C = 1000;
 	param.eps = 1e-3;

@@ -16,9 +16,18 @@
 using namespace std;
 using namespace boost;
 
+static int(*info)(const char *fmt, ...) = &printf;
+int console_width = atoi(getenv("COLUMNS"));
+unsigned int progress_length = 30;
+
 process::process ()
 {
-
+	const char* config_path = "/opt/sentiment_analysis/general.cfg";
+        config = new get_parameters(config_path);
+	config->get_general_params();
+	config->get_smad_db_params();
+	config->get_dict_db_params();
+        config->get_svm_params();
 }
 
 void process::fill_db_with_training_set()
@@ -36,13 +45,6 @@ void process::fill_db_with_training_set()
 	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
         smatch result;
 
-	// Забираем параметры из кофнигурационного файла	
-	const char* config_path = "/opt/sentiment_analysis/general.cfg";
-        get_parameters* config = new get_parameters(config_path);
-        config->get_general_params();
-        config->get_smad_db_params();
-	config->get_dict_db_params();
-	
 	// Создаём подключение к базам	
 	mysql_connect* smad_db = new mysql_connect (config->smad_db_host,
                                                     config->smad_db_name,
@@ -69,6 +71,7 @@ void process::fill_db_with_training_set()
                 input.open("/opt/sentiment_analysis/input");	// сюда запишем исходные тексты
 
 		// Читаем результаты запроса к базe данных СМАД'а и преобразовываем тексты
+		system("tput civis");
                 while (smad_db->get_result_row() == true) {
 			i++;
                         text = smad_db->get_result_value(0);
@@ -91,6 +94,8 @@ void process::fill_db_with_training_set()
 			clear_text.str("");
 			cout << "\rPorcessed texts: " << i;
                 }
+		system("tput cnorm");
+
 		cout << endl;
                 input.close();
 		smad_db->delete_result();
@@ -132,12 +137,6 @@ void process::fill_db_with_training_set()
 
 void process::fill_db_with_n_gramms ()
 {
-	// Забираем параметры из кофнигурационного файла
-	const char* config_path = "/opt/sentiment_analysis/general.cfg";
-	get_parameters* config = new get_parameters(config_path);
-	config->get_general_params();
-	config->get_dict_db_params();
-
 	int texts_count = 0;
 	int n_gramms_count = 0;
 	int current_text_emotion = 0;
@@ -179,7 +178,7 @@ void process::fill_db_with_n_gramms ()
 
 			for (next_word = words.begin(); next_word != words.end(); ++next_word) {
 				buff_word = next_word;
-				for (int j = 1; j <= config->n_gramm_size; j++) {
+				for (size_t j = 1; j <= config->n_gramm_size; j++) {
 					n_gramm += *buff_word;
 					if (current_text_emotion >= 0) {
 						n_gramms[n_gramm]["in_texts_p"]++;
@@ -239,10 +238,6 @@ void process::calculate_idf ()
 
 	string query_string;
 	
-	const char* config_path = "/opt/sentiment_analysis/general.cfg";
-        get_parameters* config = new get_parameters(config_path);
-        config->get_dict_db_params();
-	
 	pgsql_connect* dict_db = new pgsql_connect (config->dict_db_host,
                                                     config->dict_db_name,
                                                     config->dict_db_user,
@@ -269,14 +264,11 @@ void process::calculate_idf ()
 
 void process::calculate_vector_space ()
 {
-	int n_gramms_count = 0;
-	int in_this_text_ngramms = 0;
-	int texts_count = 0;
-	int n_gramm_id = 0, n_gramm_emotion = 0;
-        int text_id = 0;
+	unsigned int n_gramms_count = 0,
+		     in_this_text_ngramms = 0,
+		     texts_count = 0;
 
 	double tf = 0, tf_idf = 0;
-	double n_gramm_idf = 0;
 	double d = 0;			//нормализация
 	
 	size_t i = 0, j = 0;
@@ -296,11 +288,6 @@ void process::calculate_vector_space ()
 	unordered_map<string, int> n_gramms;
 	
 	ofstream vector_space_file;
-	
-	const char* config_path = "/opt/sentiment_analysis/general.cfg";
-        get_parameters* config = new get_parameters(config_path);
-        config->get_general_params();
-        config->get_dict_db_params();
 
 	pgsql_connect* dict_db = new pgsql_connect (config->dict_db_host,
                                                     config->dict_db_name,
@@ -315,6 +302,9 @@ void process::calculate_vector_space ()
                         texts_count = dict_db->table_size("texts");
                 else
                         texts_count = config->texts_limit;
+
+		cout << "N-gramms count:\t" << n_gramms_count << endl;
+		cout << "   Texts count:\t" << texts_count << endl;	
 		
 		query_string = "SELECT texts.mystem_text, texts.emotion, texts.text_id FROM texts;";
 		dict_db->query(query_string);
@@ -326,7 +316,9 @@ void process::calculate_vector_space ()
 		}
 
 		vector_space_file.open(config->v_space_file_name);
-
+		
+		// Отключим курсор что бы не моргвл
+		system("tput civis");
 		for (auto &this_text: *texts) {
 			block_time = clock();
 			i++;
@@ -343,7 +335,6 @@ void process::calculate_vector_space ()
 				for (size_t j = 1; j <= config->n_gramm_size; j++) {
 					// Формируем очередную N-грамму
 					n_gramm += *buff_word;
-					in_this_text_ngramms++;
 					// Записываем N-грамму в SQL запрос					
 					query_string += "'" + n_gramm + "',";
 					// Считаем сколько раз встретилась каждая N-грамма
@@ -364,6 +355,7 @@ void process::calculate_vector_space ()
 			j = 0;
 			// Найдём коэффициент для нормализации для каждой N-граммы
 			for (auto& this_n_gramm: n_gramms) {
+				in_this_text_ngramms++;
 				d += pow(dict_db->get_double_value(j, 1), 2);
 				j++;
 			}
@@ -402,17 +394,373 @@ void process::calculate_vector_space ()
 			block_time = clock() - block_time;
 			cout << "\rProcessed texts: [" << i << "/" << texts_count << "] for: " << (double)block_time * 1000 / CLOCKS_PER_SEC << " ms ";
 		}
+		system("tput cnorm");
+		
 		time = clock() - time;
 		cout << "\nCalculated vector space of: " << (double)time / CLOCKS_PER_SEC << " sec\n";
 		vector_space_file.close();
 	}
 }
-void print_progress(char completed_symbol, char not_completed_symbol, int completed_count, int progress_length) 
+//////////////////////////////////////////////////////////////////////////////////////////
+//					SVM functions					//
+//////////////////////////////////////////////////////////////////////////////////////////
+void process::start_svm_train()
 {
-	for (size_t i = 1; i <= completed_count; i++) {
+	const char *error_msg;
+
+	get_svm_parameters();
+
+	cout << "Read vector space data file";
+	read_v_space_file(config->v_space_file_name);
+	cout << "\n";
+
+	error_msg = svm_check_parameter(&prob, &param);
+
+	if (error_msg) fprintf(stderr, "ERROR: %s\n", error_msg);
+	else {
+		cout << "Train SVM classifier";
+		model = svm_train(&prob, &param);
+
+		if (svm_save_model(&config->model_file_name[0], model))
+			fprintf(stderr, "can't save model to file %s\n", &config->model_file_name[0]);
+		svm_free_and_destroy_model(&model);
+	}
+
+	svm_destroy_param(&param);
+	free(prob.y);
+	free(prob.x);
+	free(v_space);
+}
+
+void process::start_svm_predict()
+{
+	model = svm_load_model(&config->model_file_name[0]);
+
+	v_space = new svm_node[max_nr_attr];
+		
+	svm_check_probability_model(model);
+
+	predict(&config->v_space_file_name[0], "result.data");
+	svm_free_and_destroy_model(&model);
+	free(v_space);
+}
+
+void process::read_v_space_file(string v_space_file_name)
+{
+	int max_index, inst_max_index, i;
+	size_t elements, j;
+
+	char *endptr;
+	char *idx, *val, *label;
+
+	string line;
+	ifstream v_space_file;
+	v_space_file.open(v_space_file_name);
+
+	if (!v_space_file.is_open())
+		printf("can't open input file %s\n", &v_space_file_name[0]);
+	else {
+		prob.l = 0;
+		elements = 0;
+
+		while (getline(v_space_file, line)) {
+				
+			char *p = strtok(&line[0], " \t");
+
+			while (true) {
+				p = strtok(NULL, " \t");
+				if (p == NULL || *p == '\n') break;
+				++elements;
+			}
+			++elements;
+			++prob.l;
+		}
+
+		v_space_file.close(); v_space_file.open(v_space_file_name);
+
+		prob.y = new double[prob.l];
+		prob.x = new struct svm_node*[prob.l];
+		v_space = new struct svm_node[elements];
+
+		max_index = 0;
+		j = 0;
+		
+		// Отключим курсор что бы не моргвл
+		system("tput civis");
+		for (i = 0; i < prob.l; i++) {
+			inst_max_index = -1;
+			getline(v_space_file, line);
+
+			prob.x[i] = &v_space[j];
+			label = strtok(&line[0], " \t\n");
+			if (label == NULL) exit_input_error(i + 1);
+
+			prob.y[i] = strtod(label, &endptr);
+			if (endptr == label || *endptr != '\0') exit_input_error(i + 1);
+
+			while (true) {
+				idx = strtok(NULL, ":");
+				val = strtok(NULL, " \t");
+
+				if (val == NULL) break;
+
+				errno = 0;
+				v_space[j].index = (int)strtol(idx, &endptr, 10);
+
+				if (endptr == idx || errno != 0 || *endptr != '\0' || v_space[j].index <= inst_max_index)
+					exit_input_error(i + 1);
+				else
+					inst_max_index = v_space[j].index;
+
+				errno = 0;
+				v_space[j].value = strtod(val, &endptr);
+				if (endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
+					exit_input_error(i + 1);
+				++j;
+			}
+			if (inst_max_index > max_index)
+				max_index = inst_max_index;
+			v_space[j++].index = -1;
+
+			printf("\rProcessed vectros from data file: %d/%d", (i + 1), prob.l);
+		}
+		system("tput cnorm");
+
+		if (param.gamma == 0 && max_index > 0)
+			param.gamma = 1.0 / max_index;
+
+		v_space_file.close();
+	}
+}
+
+void process::predict(char* v_space_file_name, char* result_file_name)
+{
+	int correct = 0;
+	int total = 0;
+
+	int wrong_positive = 0, wrong_negative = 0, wrong_0_positive = 0, wrong_0_negative = 0;
+	int wrong_1_positive = 0, wrong_1_negative = 0, wrong_2_positive = 0, wrong_2_negative = 0;
+	
+	double TP = 0, FP = 0, FN = 0, TN = 0;
+	double P_positive = 0, P_negative = 0, P_average = 0;
+	double R_positive = 0, R_negative = 0, R_average = 0;
+	double F_positive = 0, F_negative = 0, F_on_average = 0, F_average = 0;
+	double A;
+
+	double error = 0;
+	double sump = 0, sumt = 0, sumpp = 0, sumtt = 0, sumpt = 0;
+
+	size_t j = 0;
+
+	fstream v_space_file;
+	fstream result_file;
+	ofstream results;
+	string line;
+	v_space_file.open(v_space_file_name);
+	result_file.open(result_file_name);
+
+	cout << "Get vector space from file: " << v_space_file_name << endl;
+	cout << "	Get model from file: " << config->model_file_name << endl;
+
+	size_t texts_count = 0;
+	while (getline(v_space_file, line)) texts_count++;
+
+	// переоткроем файл с векторами
+	v_space_file.close(); v_space_file.open(v_space_file_name);
+
+	double one_element = (double)progress_length / (double)texts_count;
+	cout << (one_element * 435) << endl;
+	// Выключим курсор что бы не моргал	
+	system("tput civis");
+	cout << "\nProcessed texts:\n";
+	while (getline(v_space_file, line)) {
+		int i = 0;
+		j++;
+		double target_label, predict_label;
+		char *idx, *val, *label, *endptr;
+		int inst_max_index = -1;	// strtol gives 0 if wrong format, and precomputed kernel has <index> start from 0
+
+		label = strtok(&line[0], " \t\n");
+		if (label == nullptr)		// empty line
+			exit_input_error(total + 1);
+
+		target_label = strtod(label, &endptr);
+
+		if (endptr == label || *endptr != '\0')
+			exit_input_error(total + 1);
+
+		while (true) {
+			if (i >= max_nr_attr - 1) {
+				max_nr_attr *= 2;
+				v_space = (struct svm_node *) realloc(v_space, max_nr_attr*sizeof(struct svm_node));
+			}
+
+			idx = strtok(nullptr, ":");
+			val = strtok(nullptr, " \t");
+
+			if (val == nullptr) break;
+
+			errno = 0;
+			v_space[i].index = (int)strtol(idx, &endptr, 10);
+			if (endptr == idx || errno != 0 || *endptr != '\0' || v_space[i].index <= inst_max_index)
+				exit_input_error(total + 1);
+			else
+				inst_max_index = v_space[i].index;
+
+			errno = 0;
+			v_space[i].value = strtod(val, &endptr);
+			if (endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
+				exit_input_error(total + 1);
+
+			++i;
+		}
+		printf("\r%5d/%-5d ", j, texts_count);
+		cout << "["; print_progress('*', '_', j * one_element, progress_length); cout << "]";
+		v_space[i].index = -1;
+
+		predict_label = svm_predict(model, v_space);
+		result_file << predict_label << "\n";
+
+		if (config->number_of_classes == 5) {
+			if (predict_label == target_label && target_label >= 0) {
+				++wrong_0_positive;
+				++correct;
+			}
+			else if (predict_label == target_label && target_label < 0) {
+				++wrong_0_negative;
+				++correct;
+			}
+			else if (predict_label < 0 && target_label >= 0)
+				++wrong_positive;
+			else if (predict_label >= 0 && target_label < 0)
+				++wrong_negative;
+			else if (predict_label >= 0 && target_label >= 0 && abs(predict_label - target_label) == 1)
+				++wrong_1_positive;
+			else if (predict_label < 0 && target_label < 0 && abs(predict_label - target_label) == 1)
+				++wrong_1_negative;
+			else if (predict_label >= 0 && target_label >= 0 && abs(predict_label - target_label) == 2)
+				++wrong_2_positive;
+			else if (predict_label >= 0 && target_label >= 0 && abs(predict_label - target_label) == 2)
+				++wrong_2_negative;
+		}
+		else if (config->number_of_classes == 2) {
+			if (predict_label == target_label)
+				++correct;
+			if (predict_label == target_label && target_label >= 0)
+				++TP;
+			else if (predict_label != target_label && target_label >= 0)
+				++FP;
+			else if (predict_label == target_label && target_label < 0)
+				++TN;
+			else if (predict_label != target_label && target_label < 0)
+				++FN;
+		}
+	
+		error += (predict_label - target_label)*(predict_label - target_label);
+		sump += predict_label;
+		sumt += target_label;	
+		sumpp += predict_label*predict_label;
+		sumtt += target_label*target_label;
+		sumpt += predict_label*target_label;
+		++total;
+	}
+	system("tput cnorm");
+	results.open("results.csv");
+
+	info("\nAccuracy = %g%% (%d/%d) (classification)\n", (double)correct / total * 100, correct, total);
+	if (config->number_of_classes == 5) {
+		cout << "\nDefine negative instead positive: " << wrong_positive;
+		results << "Define negative instead positive;" << wrong_positive << endl;
+		cout << "\nDefine positive instead negative: " << wrong_negative;
+		results << "Define positive instead negative;" << wrong_negative << endl;
+		cout << "\n   Wrong for 0 class on positive: " << wrong_0_positive;
+		results << "Wrong for 0 class on positive;" << wrong_0_positive << endl;
+		cout << "\n   Wrong for 0 class on negative: " << wrong_0_negative;
+		results << "Wrong for 0 class on negative;" << wrong_0_negative << endl;
+		cout << "\n   Wrong for 1 class on positive: " << wrong_1_positive;	
+		results << "Wrong for 1 class on positive;" << wrong_1_positive << endl;
+		cout << "\n   Wrong for 1 class on negative: " << wrong_1_negative;
+		results << "Wrong for 1 class on negative;" << wrong_1_negative << endl;
+		cout << "\n   Wrong for 2 class on positive: " << wrong_2_positive;
+		results << "Wrong for 2 class on positive;" << wrong_2_positive << endl;
+		cout << "\n   Wrong for 2 class on negative: " << wrong_2_negative << endl;
+		results << "Wrong for 2 class on negative;" << wrong_2_negative << endl;
+	}
+	else if (config->number_of_classes == 2) {
+		P_positive = TP / (TP + FP);
+		P_negative = TN / (TN + FN);
+		P_average = (P_positive + P_negative) / 2;
+		R_positive = TP / (TP + FN);
+		R_negative = TN / (TN + FP);
+		R_average = (R_positive + R_negative) / 2;
+		F_positive = (2 * P_positive * R_positive) / (P_positive + R_positive);
+		F_negative = (2 * P_negative * R_negative) / (P_negative + R_negative);
+		F_on_average = (2 * P_average * R_average) / (P_average + R_average);
+		F_average = (F_positive + F_negative) / 2;
+		A = (TP + TN) / (TP + FN + FP + TN);
+		cout << "Results:\n";
+		cout << "\nPrecision positive: " << P_positive; results << "Precision positive;" << P_positive << endl;
+		cout << "\nPrecision negative: " << P_negative; results << "Precision negative;" << P_negative << endl;
+		cout << "\n Precision average: " << P_average; results << "Precision average;" << P_average << endl;
+		cout << "\n   Recall positive: " << R_positive; results << "Recall positive;" << R_positive << endl;
+		cout << "\n   Recall negative: " << R_negative; results << "Recall negative;" << R_negative << endl;
+		cout << "\n    Recall average: " << R_average; results << "Recall average;" << R_average << endl;
+		cout << "\n  Funct 1 positive: " << F_positive; results << "Function 1 positive;" << F_positive << endl;
+		cout << "\n  Funct 1 negative: " << F_negative; results << "Function 1 negative;" << F_negative << endl;
+		cout << "\nFunct 1 on average: " << F_on_average; results << "Function 1 on average;" << F_on_average << endl;
+		cout << "\n   Funct 1 average: " << F_average; results << "Function 1 average;" << F_average << endl;
+		cout << "\n          Accuracy: " << A << endl; results << "Accuracy;" << A;
+	}
+	results.close();	
+}
+
+void process::get_svm_parameters() 
+{
+	param.svm_type = config->svm_type;
+	param.kernel_type = config->kernel_type;
+	param.degree = 3;
+	param.gamma = 0;
+	param.coef0 = 0;
+	param.nu = 0.5;
+	param.cache_size = 100;
+	param.C = 1000;
+	param.eps = 1e-3;
+	param.p = 0.1;
+	param.shrinking = 1;
+	param.probability = 0;
+	param.nr_weight = 0;
+	param.weight_label = NULL;
+	param.weight = NULL;
+	//cross_validation = 0;
+}
+
+void process::exit_input_error(int line_num)
+{
+	fprintf(stderr, "Wrong input format at line %d\n", line_num);
+	exit(1);
+}
+
+void process::print_progress(char completed_symbol, char not_completed_symbol, unsigned int completed_count, unsigned int progress_length) 
+{
+	for (size_t i = 1; i <= completed_count + 1; i++) {
 		cout << completed_symbol;
 	}
-	for (size_t i = completed_count + 1; i <= progress_length; i++) {
+	for (size_t i = completed_count + 2; i <= progress_length; i++) {
 		cout << not_completed_symbol;
 	}
+}
+void process::print_line (size_t symbols_count, char symbol)
+{
+        for (size_t i = 0; i < symbols_count; i ++) {
+                cout << symbol;
+        }
+        cout << endl;
+}
+void process::print_line (char symbol)
+{
+        size_t symbols_count = atoi(getenv("COLUMNS"));
+        for (size_t i = 0; i < symbols_count; i ++) {
+                cout << symbol;
+        }
+        cout << endl;
 }

@@ -1,8 +1,3 @@
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <unordered_map>
-
 #include "get_parameters.h"
 
 using namespace std;
@@ -56,7 +51,7 @@ string get_parameters::get_param (string param_name)
 		config.readFile(config_file);
 	}
 	catch (const FileIOException &fioex) {
-		cerr << "I/O error while reading file." << endl;
+		cerr << "I/O error while reading configuration file." << endl;
 	}
 	catch (const ParseException &pex) {
 		cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine() << " - " << pex.getError() << endl;
@@ -80,7 +75,7 @@ int get_parameters::get_int_param (string param_name)
 		config.readFile(config_file);
 	}
 	catch (const FileIOException &fioex) {
-		cerr << "I/O error while reading file." << endl;
+		cerr << "I/O error while reading configuration file." << endl;
 	}
 	catch (const ParseException &pex) {
 		cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine() << " - " << pex.getError() << endl;
@@ -104,7 +99,7 @@ double get_parameters::get_double_param (string param_name)
 		config.readFile(config_file);
 	}
 	catch (const FileIOException &fioex) {
-		cerr << "I/O error while reading file." << endl;
+		cerr << "I/O error while reading configuration file." << endl;
 	}
 	catch (const ParseException &pex) {
 		cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine() << " - " << pex.getError() << endl;
@@ -128,7 +123,7 @@ bool get_parameters::get_bool_param (string param_name)
 		config.readFile(config_file);
 	}
 	catch (const FileIOException &fioex) {
-		cerr << "I/O error while reading file." << endl;
+		cerr << "I/O error while reading configuration file." << endl;
 	}
 	catch (const ParseException &pex) {
 		cerr << "Parse error at " << pex.getFile() << ":" << pex.getLine() << " - " << pex.getError() << endl;
@@ -143,4 +138,3 @@ bool get_parameters::get_bool_param (string param_name)
 
 	return param_value;
 }
-

@@ -12,6 +12,7 @@ private:
 public:
 	process ();
 	void fill_db_with_training_set();
+	void fill_db_with_training_set_from_file();
 	void fill_db_with_n_gramms();
 	void calculate_idf();
 	void calculate_vector_space();
@@ -32,4 +33,5 @@ private:
 	void print_progress(char completed_symbol, char not_completed_symbol, unsigned int completed_count, unsigned int progress_length);
 	void print_line (size_t symbols_count, char symbol);
 	void print_line (char symbol);
+	char* get_time ();
 };

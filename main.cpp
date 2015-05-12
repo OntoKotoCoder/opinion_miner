@@ -10,12 +10,13 @@
 
 using namespace std;
 
-const char* config_path = "/opt/sentiment_analysis/general.cfg";
+const char* config_path = "/opt/opinion_miner/general.cfg";
 get_parameters*  config = new get_parameters(config_path);
 
 int main (int argc, char **argv) 
 {
 	bool do_fill_db_with_training_set = false,
+	     do_fill_db_with_training_set_from_file = false,
 	     do_fill_db_with_n_gramms = false,
 	     do_calculate_vector_space = false,
 	     do_start_svm_train = false,
@@ -28,10 +29,11 @@ int main (int argc, char **argv)
 
 	int option;
 	int option_index;
-	const char* short_options = "htnvspl:d:m:";
+	const char* short_options = "htfnvspl:d:m:";
 	const struct option long_options[] = {
 		{"help", no_argument, nullptr, 'h'},
 		{"fill_texts", no_argument, nullptr, 't'},
+		{"texts_from_file", no_argument, nullptr, 'f'},
 		{"fill_n_gramms", no_argument, nullptr, 'n'},
 		{"calc_vector", no_argument, nullptr, 'v'},
 		{"svm_train", no_argument, nullptr, 's'},
@@ -44,7 +46,6 @@ int main (int argc, char **argv)
 	
 	cout << "Sentiment Analysis" << endl;
 	cout << "Version: 0.1" << endl;
-	system("export COLUMNS"); 
 	//get_boost_version();
 	
 	process* proc = new process();
@@ -73,6 +74,10 @@ int main (int argc, char **argv)
 				do_fill_db_with_training_set = true;
 				break;
 			}
+			case 'f': {
+				do_fill_db_with_training_set_from_file = true;
+				break;
+			}
 			case 'n': {
 				do_fill_db_with_n_gramms = true;
 				break;
@@ -95,6 +100,13 @@ int main (int argc, char **argv)
 		cout << ">> Populate the database with texts of starting sample" << endl;
 		print_line('='); 
 		proc->fill_db_with_training_set();
+		print_line('=');
+		cout << "Finished!" << endl << endl;
+	}
+	if (do_fill_db_with_training_set_from_file == true) {
+		cout << ">> Populate the database with texts of starting sample" << endl;
+		print_line('='); 
+		proc->fill_db_with_training_set_from_file();
 		print_line('=');
 		cout << "Finished!" << endl << endl;
 	}
@@ -153,7 +165,6 @@ void get_boost_version ()
 }
 void get_help ()
 {
-	system("export COLUMNS");
 	cout << "О программе:" << endl;
 	print_line('=');
 	cout << " -t : Инициализирует заполнение базы данных текстами начальной выборки." << endl

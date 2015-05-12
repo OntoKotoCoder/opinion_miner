@@ -3,8 +3,8 @@
 #include <fstream>
 #include <sstream>
 #include <unordered_map>
-
-#include <time.h>
+//#include <ctime>
+//#include <time.h>
 
 #include <boost/regex.hpp>
 #include <boost/regex/icu.hpp>
@@ -63,7 +63,7 @@ void process::fill_db_with_training_set()
                 else
 			query_string = "select tmp_news.text, tmp_news.myemote, tmp_news.guid from tmp_news where myemote is not null limit " + to_string(config->texts_limit) + ";";
 		smad_db->query(query_string);
-                input.open("/opt/sentiment_analysis/input");	// сюда запишем исходные тексты
+                input.open("/opt/opinion_miner/input");	// сюда запишем исходные тексты
 
 		// Читаем результаты запроса к базe данных СМАД'а и преобразовываем тексты
 		system("tput civis");
@@ -99,11 +99,130 @@ void process::fill_db_with_training_set()
                 
 		// Прогоняем тексты из input через mystem, результаты пишем output 
 		cout << "Mystem: start mysteming texts" << endl;
-		system("mystem -cwld /opt/sentiment_analysis/input /opt/sentiment_analysis/output");
+		system("mystem -cwld /opt/opinion_miner/input /opt/opinion_miner/output");
 		cout << "Mystem: finished mysteming texts" << endl;
 	
 		// Читаем output и заносим обработанные mystem'ом тексты в базу
-		output.open("/opt/sentiment_analysis/output");
+		output.open("/opt/opinion_miner/output");
+		query_string = "BEGIN;\n";
+		i = 0;
+		while (getline(output, text)) {
+			i++;
+			text_start = text.begin();
+                        text_end = text.end();
+			// Регуляркой убераем {} оставленные mystem'ом
+			while (u32regex_search(text_start, text_end, result, u32rx)) {
+                                clear_text << result[1] << " ";
+                                text_start = result[1].second;
+                        }
+			query_string += "UPDATE texts SET mystem_text = '" 
+					+ clear_text.str() + "' WHERE text_id = " + to_string(i) + ";\n";
+			clear_text.str("");
+			cout << "\rInserted mystem texts to database: " << i;
+		}
+		cout << endl;
+		// Отправлем в базу сразу несколько запросов через BEGIN -> COMMIT
+		query_string += "COMMIT;";
+		dict_db->query(query_string);
+		dict_db->delete_result();
+		// Закончиили формирования таблицы texts
+		dict_db->close();
+        }
+}
+
+void process::fill_db_with_training_set_from_file()
+{
+	bool is_text = false;
+	
+	size_t i = 0;
+	string some_data;
+        string text, smad_guid, emotion;
+        string::const_iterator text_start;
+        string::const_iterator text_end;
+        stringstream clear_text;
+	string query_string = "";
+        
+	ifstream texts_file;
+	ofstream input;
+        ifstream output;
+	
+	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
+	u32regex u32_kill_control = make_u32regex("([\\x00-\\x1F])");
+        smatch result;
+
+	// Создаём подключение к базам	
+	pgsql_connect* dict_db = new pgsql_connect (config->dict_db_host,
+                                                    config->dict_db_name,
+                                                    config->dict_db_user,
+                                                    config->dict_db_pass,
+                                                    config->dict_db_encod);
+	
+	texts_file.open("/opt/opinion_miner/data/texts");       // отсюда заберём тексты
+	cout << "Read texts from file: /opt/opinion_miner/data/texts" << endl;
+	
+	if (dict_db->connect() == true && texts_file.is_open()) {
+		// Очищаем таблицу с текстами
+		dict_db->clear_table("texts");
+		dict_db->set_to_zero("texts_text_id_seq");
+		dict_db->delete_result();
+                
+		input.open("/opt/opinion_miner/input");		// сюда запишем исходные тексты
+		// Читаем результаты запроса к базe данных СМАД'а и преобразовываем тексты
+		system("tput civis");
+                while (getline(texts_file, some_data)) {
+			if (some_data.length() == 5) {
+				some_data = some_data.erase(some_data.length() - 1);
+			}
+			if (some_data == "text") {
+				is_text = true;
+			}
+			else if (some_data == "emot") {
+				is_text = false;
+			}
+			else {
+				if (is_text == true) {
+					text += some_data + "\n";
+				}
+				else if (is_text == false) {
+					emotion = some_data;
+				}
+			}
+			if (is_text == false && some_data != "emot") {
+				i++;
+                        	text_start = text.begin();
+                        	text_end = text.end();
+				// Регуляркой забираем только слова на русском языке и убираем все знаки препинания
+                        	while (u32regex_search(text_start, text_end, result, u32rx)) {
+                                	clear_text << result[1] << " ";
+                                	text_start = result[1].second;
+                        	}
+				// В файл input заносим обработанный текст
+				input << clear_text.str() << endl;
+				//========================
+				// не забыть про smad_guid
+				//========================
+				smad_guid = "NULL";
+				query_string = "INSERT INTO texts (original_text, pretreat_text, emotion, smad_guid) VALUES ('" 
+						+ text + "', '" + clear_text.str() + "', " + emotion + ", '" + smad_guid + "');";
+                        	dict_db->query(query_string);
+				dict_db->delete_result();
+				clear_text.str("");
+				text = "";
+				cout << "\rPorcessed texts: " << i;
+			}
+                }
+		system("tput cnorm");
+
+		cout << endl;
+                input.close();
+                
+		// Прогоняем тексты из input через mystem, результаты пишем output 
+		cout << "Mystem: start mysteming texts" << endl;
+		system("mystem -cwld /opt/opinion_miner/input /opt/opinion_miner/output");
+		cout << "Mystem: finished mysteming texts" << endl;
+	
+		// Читаем output и заносим обработанные mystem'ом тексты в базу
+		output.open("/opt/opinion_miner/output");
 		query_string = "BEGIN;\n";
 		i = 0;
 		while (getline(output, text)) {
@@ -132,8 +251,10 @@ void process::fill_db_with_training_set()
 
 void process::fill_db_with_n_gramms ()
 {
-	int texts_count = 0;
-	int n_gramms_count = 0;
+	size_t i = 0;
+	size_t limit = 0;
+	unsigned int texts_count = 0;
+	unsigned int n_gramms_count = 0;
 	int current_text_emotion = 0;
 	int current_text_id = 0;
 
@@ -141,8 +262,10 @@ void process::fill_db_with_n_gramms ()
 	string query_string;
 	string text;
 	string n_gramm;
-
+	
+	vector<string> query_strings;
 	char_separator<char> sep(" ");
+	tokenizer<char_separator<char>>* words(string, char_separator<char>);
 	tokenizer<char_separator<char>>::iterator next_word;
 	tokenizer<char_separator<char>>::iterator buff_word;
 
@@ -196,30 +319,61 @@ void process::fill_db_with_n_gramms ()
 			}
 		}
 		dict_db->delete_result();
+		
 		query_string = "BEGIN;\n";
+		i = 0;
 		for (auto &this_n_gramm: n_gramms) {
+			i++;
 			query_string += "INSERT INTO dictionary (n_gramm, in_texts_n, in_texts_p, texts_with_n, texts_with_p) VALUES ('" +
 			this_n_gramm.first + "', " +
 			to_string(this_n_gramm.second["in_texts_n"]) + ", " +
 			to_string(this_n_gramm.second["in_texts_p"]) + ", " +
 			to_string(this_n_gramm.second["texts_with_n"]) + ", " +
 			to_string(this_n_gramm.second["texts_with_p"]) + ");\n";
+			if (i == 50000) {
+				query_string += "COMMIT;";
+				query_strings.push_back(query_string);
+				query_string = "BEGIN;\n";
+				i = 0;
+			}
 		}
 		query_string += "COMMIT;";
-		dict_db->query(query_string);
+		query_strings.push_back(query_string);
+		query_string = "";
+
+		for (auto &this_query_string: query_strings) {
+			dict_db->query(this_query_string);
+		}
 		dict_db->delete_result();
+		query_strings.clear();		
 
 		n_gramms_count = dict_db->table_size("dictionary");			
 		query_string = "SELECT dictionary.n_gramm, dictionary.texts_with_p, dictionary.texts_with_n, n_gramm_id FROM dictionary;";
                 dict_db->query(query_string);
-                query_string = "BEGIN;\n";
-                for (int i = 0; i < n_gramms_count; i++) {
+                
+		query_string = "BEGIN;\n";
+		limit = 50000;
+                for (size_t i = 0; i < n_gramms_count; i++) {
                         idf = log((double)texts_count / (dict_db->get_int_value(i, 1) + dict_db->get_int_value(i, 2)));
                         query_string += "UPDATE dictionary set idf = " + to_string(idf) + 
 					" WHERE n_gramm_id = " + dict_db->get_value(i, 3) + ";\n";
+			if (i == limit) {
+				query_string += "COMMIT;";
+                                query_strings.push_back(query_string);
+                                query_string = "BEGIN;\n";
+                                limit = limit + 50000;
+			}
                 }
                 query_string += "COMMIT;";
-                dict_db->query(query_string);
+		query_strings.push_back(query_string);
+		query_string = "";
+		dict_db->delete_result();
+
+		for (auto &this_query_string: query_strings) {
+                        dict_db->query(this_query_string);
+                }
+                dict_db->delete_result();
+		query_strings.clear();
 		dict_db->close();
 	}
 }
@@ -429,13 +583,14 @@ void process::start_svm_train()
 
 void process::start_svm_predict()
 {
+	char result_file_name[100];
+	strcpy(result_file_name, "/opt/opinion_miner/data/result.data_");
 	model = svm_load_model(&config->model_file_name[0]);
 
 	v_space = new svm_node[max_nr_attr];
 		
 	svm_check_probability_model(model);
-
-	predict(&config->v_space_file_name[0], "result.data");
+	predict(&config->v_space_file_name[0], strcat(result_file_name, get_time()));
 	svm_free_and_destroy_model(&model);
 	free(v_space);
 }
@@ -505,7 +660,7 @@ void process::read_v_space_file(string v_space_file_name)
 				if (endptr == idx || errno != 0 || *endptr != '\0' || v_space[j].index <= inst_max_index)
 					exit_input_error(i + 1);
 				else
-					inst_max_index = v_space[j].index;
+					inst_max_index = v_space[j].index;	// Наибольший индекс в конкретном векторе
 
 				errno = 0;
 				v_space[j].value = strtod(val, &endptr);
@@ -514,7 +669,7 @@ void process::read_v_space_file(string v_space_file_name)
 				++j;
 			}
 			if (inst_max_index > max_index)
-				max_index = inst_max_index;
+				max_index = inst_max_index;	// Наибольший индекс во всей коллекции векторов
 			v_space[j++].index = -1;
 
 			printf("\rProcessed vectros from data file: %d/%d", (i + 1), prob.l);
@@ -549,14 +704,16 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 	size_t j = 0;
 
 	fstream v_space_file;
-	fstream result_file;
+	ofstream result_file;
 	ofstream results;
 	string line;
 	v_space_file.open(v_space_file_name);
+	
 	result_file.open(result_file_name);
 
-	cout << " Get vector space from file: " << v_space_file_name << endl;
-	cout << "	Get model from file: " << config->model_file_name << endl;
+	cout << "Get vector space from file: " << v_space_file_name << endl;
+	cout << "       Get model from file: " << config->model_file_name << endl;
+	cout << "     Write results to file: " << result_file_name << endl;
 
 	size_t texts_count = 0;
 	while (getline(v_space_file, line)) texts_count++;
@@ -565,22 +722,29 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 	v_space_file.close(); v_space_file.open(v_space_file_name);
 
 	double one_element = (double)progress_length / (double)texts_count;
-	// Выключим курсор что бы не моргал	
+	// Выключим курсор что бы не моргал во время отрисовки прогресс бара 	
 	system("tput civis");
+	
 	cout << "\nProcessed texts:\n";
 	while (getline(v_space_file, line)) {
-		int i = 0;
 		j++;
+		
+		int i = 0;
 		double target_label, predict_label;
 		char *idx, *val, *label, *endptr;
 		int inst_max_index = -1;	// strtol gives 0 if wrong format, and precomputed kernel has <index> start from 0
-
+		
+		// Забираем первый символ в строке - номер класса
 		label = strtok(&line[0], " \t\n");
-		if (label == nullptr)		// empty line
+
+		// Проверим не пустая ли строка нам попалась
+		if (label == nullptr)
 			exit_input_error(total + 1);
-
+		
+		// Конвертируем в double номер класса 
 		target_label = strtod(label, &endptr);
-
+		
+		// Проверим 
 		if (endptr == label || *endptr != '\0')
 			exit_input_error(total + 1);
 
@@ -590,12 +754,13 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 				v_space = (struct svm_node *) realloc(v_space, max_nr_attr*sizeof(struct svm_node));
 			}
 
-			idx = strtok(nullptr, ":");
-			val = strtok(nullptr, " \t");
+			idx = strtok(nullptr, ":");	// Вытаскиваем очередной индекс признака из вектора
+			val = strtok(nullptr, " \t");	// Вытаскиваем очередное значение признака из вектора
 
-			if (val == nullptr) break;
+			if (val == nullptr) break;	// Конец вектора
 
 			errno = 0;
+			// Конвертируем в long int индекс и записываем в структуру v_space
 			v_space[i].index = (int)strtol(idx, &endptr, 10);
 			if (endptr == idx || errno != 0 || *endptr != '\0' || v_space[i].index <= inst_max_index)
 				exit_input_error(total + 1);
@@ -603,18 +768,20 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 				inst_max_index = v_space[i].index;
 
 			errno = 0;
+			// Конвертируем в double значние и записываем в структуру v_space
 			v_space[i].value = strtod(val, &endptr);
 			if (endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
 				exit_input_error(total + 1);
 
 			++i;
 		}
+
 		printf("\r%5d/%-5d ", j, texts_count);
 		cout << "["; print_progress('*', '_', j * one_element, progress_length); cout << "]";
 		v_space[i].index = -1;
 
 		predict_label = svm_predict(model, v_space);
-		result_file << predict_label << "\n";
+		result_file << predict_label << endl;
 
 		if (config->number_of_classes == 5) {
 			if (predict_label == target_label && target_label >= 0) {
@@ -707,7 +874,8 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 		cout << "\n   Funct 1 average: " << F_average; results << "Function 1 average;" << F_average << endl;
 		cout << "\n          Accuracy: " << A << endl; results << "Accuracy;" << A;
 	}
-	results.close();	
+	results.close();
+	result_file.close();	
 }
 
 void process::get_svm_parameters() 
@@ -759,4 +927,16 @@ void process::print_line (char symbol)
                 cout << symbol;
         }
         cout << endl;
+}
+char* process::get_time ()
+{
+	time_t rawtime;
+        struct tm* timeinfo;
+        char* _buffer;
+
+        time (&rawtime);
+        timeinfo = localtime (&rawtime);
+
+        strftime (_buffer,80,"%d.%m.%y-%H:%M:%S",timeinfo);
+	return _buffer;
 }

@@ -28,10 +28,10 @@ process.o: process.cpp
 	$(CXX) $(CFLAGS) process.cpp
 
 install:
-	install ./connect /opt/sentiment_analysis
+	install ./opinion_miner /opt/opinion_miner
 
 dist:
 	tar -czf connect.tar.gz *.cpp *.h Makefile config/*
 
 clean:
-	rm -rf *.o
+	rm -rf *.o opinion_miner

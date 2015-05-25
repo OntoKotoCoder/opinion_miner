@@ -31,7 +31,7 @@ install:
 	install ./opinion_miner /opt/opinion_miner
 
 dist:
-	tar -czf connect.tar.gz *.cpp *.h Makefile config/*
+	tar -czf connect.tar.gz *.cpp *.h Makefile* config/*
 
 clean:
 	rm -rf *.o opinion_miner

@@ -15,7 +15,8 @@ private:
 		db_name,
 		db_host;
 
-	ofstream log_file;
+	ofstream query_log;
+	ofstream worker_log;
 public:
 	bool connect_error;
         bool query_error;
@@ -26,6 +27,7 @@ public:
 
 	bool connect ();
 	void query (string query_string);
+	unsigned int rows_count ();
 	string get_value (int i, int j);
 	int get_int_value (int i, int j);
 	double get_double_value (int i, int j);
@@ -36,7 +38,8 @@ public:
 	void clear_table (string table_name);
 	void set_to_zero (string sequence_name);
 	int table_size (string table_name);
+	string last_date (string table_name, string column_name);
 
 private:
-	string get_time();
+	char* get_time();
 };

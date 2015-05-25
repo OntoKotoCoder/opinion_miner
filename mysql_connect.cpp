@@ -13,6 +13,9 @@ mysql_connect::mysql_connect (string new_db_host, string new_db_name,
 	db_name = new_db_name;
 	db_user = new_db_user;
 	db_pass = new_db_pass;
+
+	query_log.open("/var/log/opinion_miner/query.log", fstream::app);
+        worker_log.open("/var/log/opinion_miner/worker.log", fstream::app);
 }
 
 bool mysql_connect::connect ()
@@ -22,11 +25,11 @@ bool mysql_connect::connect ()
 					db_pass.c_str(), db_name.c_str(), 3306,0,0);
 
 	if (connection == nullptr) {
-		cout << "MySQL ERROR: " << mysql_error(&mysql) << endl;
+		worker_log << get_time() << " [  MySQL] # ERROR: " << mysql_error(&mysql) << endl;
 		return false;
 	}
 	else {
-		cout << "MySQL: Connection to '" << db_host << "@" << db_name << "' established" << endl;
+		worker_log << get_time() << " [  MySQL] # Connection to '" << db_host << "@" << db_name << "' established" << endl;
 		return true;
 	}
 }
@@ -36,7 +39,7 @@ void mysql_connect::query (string query_string)
 	query_error = false;
 	query_state = mysql_query(connection, query_string.c_str());
 	if (query_state !=0) {
-		cout << mysql_error(connection) << endl;
+		cout << get_time() << " " << mysql_error(connection) << endl;
 		query_error = true;
 	}
 	result = mysql_store_result(connection);
@@ -65,5 +68,18 @@ void mysql_connect::delete_result ()
 
 void mysql_connect::close () {
 	mysql_close(connection);
-	cout << "MySQL: Connection to '" + db_host + "@" + db_name + "' closed" << endl;
+	worker_log << get_time() << " [  MySQL] # Connection to '" + db_host + "@" + db_name + "' closed" << endl;
+}
+
+char* mysql_connect::get_time ()
+{
+        time_t rawtime;
+        struct tm* timeinfo;
+        char* _buffer = new char[17];
+
+        time (&rawtime);
+        timeinfo = localtime (&rawtime);
+
+        strftime (_buffer,80,"%d.%m.%y-%H:%M:%S",timeinfo);
+        return _buffer;
 }

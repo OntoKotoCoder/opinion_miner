@@ -1,4 +1,5 @@
 #include <string>
+#include <fstream>
 
 #include <mysql/mysql.h>
 
@@ -16,6 +17,9 @@ private:
 		 db_name,
 		 db_user,
 		 db_pass;
+
+	ofstream query_log;
+        ofstream worker_log;
 public:
 	bool query_error;
 
@@ -29,4 +33,6 @@ public:
 	string get_result_value (int value_ind);
 	void delete_result ();
 	void close ();
+private:
+	char* get_time();
 };

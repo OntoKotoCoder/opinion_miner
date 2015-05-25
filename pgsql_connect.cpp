@@ -21,18 +21,19 @@ pgsql_connect::pgsql_connect (string new_db_host, string new_db_name,
 	db_host = new_db_host;
 	db_name = new_db_name;
 	
-	log_file.open("/var/log/sentiment_analysis/query_log", fstream::app);
+	query_log.open("/var/log/opinion_miner/query.log", fstream::app);
+	worker_log.open("/var/log/opinion_miner/worker.log", fstream::app);
 }
 
 bool pgsql_connect::connect ()
 {
 	conn = PQconnectdb(&db_params[0]);
 	if (PQstatus(conn) != CONNECTION_OK) {
-		cout << "PGSQL ERROR: " << PQerrorMessage(conn) << endl;
+		worker_log << get_time() << " [  PGSQL] # ERROR: " << PQerrorMessage(conn) << endl;
 		return false;
 	}
 	else {
-		cout << "PGSQL: Connection to '" << db_host << "@" << db_name << "' established" << endl;
+		worker_log << get_time() << " [  PGSQL] # Connection to '" << db_host << "@" << db_name << "' established" << endl;
 		return true;
 	}
 }
@@ -47,8 +48,13 @@ void pgsql_connect::query (string query_string)
 
 	if (error_message.str() != "") {
 		query_error = true;
-		log_file << get_time() << " " << error_message.str() << endl;
+		query_log << get_time() << " " << error_message.str() << endl;
 	}
+}
+
+unsigned int pgsql_connect::rows_count()
+{
+	return PQntuples(query_result);
 }
 
 string pgsql_connect::get_value (int i, int j)
@@ -74,7 +80,7 @@ void pgsql_connect::delete_result ()
 void pgsql_connect::close ()
 {
 	PQfinish(conn);
-	cout << "PGSQL: Connection to '" + db_host + "@" + db_name + "' closed" << endl;
+	worker_log << get_time() << " [  PGSQL] # Connection to '" + db_host + "@" + db_name + "' closed" << endl;
 }
 
 void pgsql_connect::clear_table (string table_name)
@@ -86,10 +92,10 @@ void pgsql_connect::clear_table (string table_name)
 	error_message << PQerrorMessage(conn);	
 	
 	if (error_message.str() != "") {
-		cout << "PGSQL: " << error_message.str();	
+		cout << " [  PGSQL] " << error_message.str();	
 	}
 	else {
-		cout << "PGSQL: " << "Removed from '" << db_name << "/" << table_name << "' all entries" << endl;
+		cout << " [  PGSQL] " << "Removed from '" << db_name << "/" << table_name << "' all entries" << endl;
 	}
 }
 
@@ -102,10 +108,10 @@ void pgsql_connect::set_to_zero (string sequence_name)
         error_message << PQerrorMessage(conn);
 
         if (error_message.str() != "") {
-                cout << "PGSQL: " << error_message.str();
+                cout << " [  PGSQL] " << error_message.str();
         }
         else {
-                cout << "PGSQL: " << "Sequence '" << sequence_name << "' set by 1" << endl;
+                cout << " [  PGSQL] " << "Sequence '" << sequence_name << "' set by 1" << endl;
         }
 }
 
@@ -121,18 +127,34 @@ int pgsql_connect::table_size (string table_name)
 	return size;
 }
 
-string pgsql_connect::get_time ()
+string pgsql_connect::last_date (string table_name, string column_name)
 {
-	time_t now = time(0);
-	tm *ltm = localtime(&now);
-	stringstream log_time;
-	log_time << "[" <<
-		    ltm->tm_mday << "/" <<
-		    1 + ltm->tm_mon << "/" <<
-		    1900 + ltm->tm_year << ":" <<
-		    1 + ltm->tm_hour << ":" <<
-		    1 + ltm->tm_min << ":" <<
-		    1 + ltm->tm_sec <<
-		    "]";
-	return log_time.str();
+	string query_string = "SELECT " + table_name + "." + column_name + " from " + table_name  + " order by " + column_name  + " desc limit 1;";
+	stringstream error_message;
+	string date = "";
+	
+	query_result = PQexec(conn, &query_string[0]);
+	error_message << PQerrorMessage(conn);
+
+	if (error_message.str() != "") {
+		query_log << get_time() << " " << error_message.str() << endl;
+        }
+	else {
+		date = string(PQgetvalue(query_result, 0, 0));
+	}
+
+	return date;
+}
+
+char* pgsql_connect::get_time ()
+{
+        time_t rawtime;
+        struct tm* timeinfo;
+        char* _buffer = new char[17];
+
+        time (&rawtime);
+        timeinfo = localtime (&rawtime);
+
+        strftime (_buffer,80,"%d.%m.%y-%H:%M:%S",timeinfo);
+        return _buffer;
 }

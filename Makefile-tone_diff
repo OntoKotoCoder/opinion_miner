@@ -1,0 +1,34 @@
+CXX ?= g++
+LIBS = -lpthread -lboost_regex -licuuc -lconfig++ -lpq -lmysqlclient
+ALIBS = -Lsvm -lsvm
+CFLAGS = -std=c++11 -c -Wall
+SHARED_LIB_FLAG = -shared -o libsvm.so.2 svm/svm.cpp
+
+all: connect
+
+connect: tone_diff.o get_parameters.o pgsql_connect.o mysql_connect.o
+	$(CXX) $(LIBS) $(ALIBS) tone_diff.o get_parameters.o pgsql_connect.o mysql_connect.o -o tone_diff
+
+lib: svm/svm.cpp
+	$(CXX) -shared -o svm/libsvm.so.2 svm/svm.cpp
+
+tone_diff.o: tone_diff.cpp
+	$(CXX) $(CFLAGS) tone_diff.cpp
+
+get_parameters.o: get_parameters.cpp
+	$(CXX) $(CFLAGS) get_parameters.cpp
+
+pgsql_connect.o: pgsql_connect.cpp
+	$(CXX) $(CFLAGS) pgsql_connect.cpp
+
+mysql_connect.o: mysql_connect.cpp
+	$(CXX) $(CFLAGS) mysql_connect.cpp
+
+install:
+	install ./tone_diff /opt/opinion_miner
+
+dist:
+	tar -czf connect.tar.gz *.cpp *.h Makefile config/*
+
+clean:
+	rm -rf *.o tone_diff

@@ -22,7 +22,8 @@ unsigned int progress_length = 30;
 
 process::process ()
 {
-
+	worker_log.open("/var/log/opinion_miner/worker.log", fstream::app);
+	error_log.open("/var/log/opinion_miner/error.log", fstream::app);
 }
 
 void process::fill_db_with_training_set()
@@ -59,7 +60,7 @@ void process::fill_db_with_training_set()
 		dict_db->delete_result();
 		// Забираем из базы данных СМАД'а все тексты с эмоциональной тональностью
 		if (config->texts_limit == -1)
-			query_string = "select tmp_news.text, tmp_news.myemote, tmp_news.guid from tmp_news where myemote is not null;";
+			query_string = "select tmp_news.text, tmp_news.myemote, tmp_news.guid tmp_date.guid from tmp_news where myemote is not null;";
                 else
 			query_string = "select tmp_news.text, tmp_news.myemote, tmp_news.guid from tmp_news where myemote is not null limit " + to_string(config->texts_limit) + ";";
 		smad_db->query(query_string);
@@ -130,13 +131,122 @@ void process::fill_db_with_training_set()
         }
 }
 
+void process::update_db_with_training_set()
+{
+	size_t i = 0;
+	size_t dictionary_size = 0;
+	string last_date;
+        string text, smad_guid, emotion, date;
+        string::const_iterator text_start;
+        string::const_iterator text_end;
+        stringstream clear_text;
+	string query_string = "";
+        
+	ofstream input;
+        ifstream output;
+	
+	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
+        smatch result;
+
+	// Создаём подключение к базам	
+	mysql_connect* smad_db = new mysql_connect (config->smad_db_host,
+                                                    config->smad_db_name,
+                                                    config->smad_db_user,
+                                                    config->smad_db_pass);
+        
+	pgsql_connect* dict_db = new pgsql_connect (config->dict_db_host,
+                                                    config->dict_db_name,
+                                                    config->dict_db_user,
+                                                    config->dict_db_pass,
+                                                    config->dict_db_encod);
+
+	if (smad_db->connect() == true && dict_db->connect() == true) {
+		dictionary_size = dict_db->table_size("texts");
+		last_date = dict_db->last_date("texts", "date");
+		
+		// Забираем из базы данных СМАД'а все тексты с эмоциональной тональностью
+		if (config->texts_limit == -1)
+			query_string = "select tmp_news.text, tmp_news.myemote, tmp_news.guid, tmp_news.date from tmp_news where myemote is not null and date > '" + last_date + "';";
+                else
+			query_string = "select tmp_news.text, tmp_news.myemote, tmp_news.guid, tmp_news.date from tmp_news where myemote is not null and date > '" + last_date + "' limit " + to_string(config->texts_limit) + ";";
+		smad_db->query(query_string);
+                input.open("/opt/opinion_miner/input");	// сюда запишем исходные тексты
+
+		// Читаем результаты запроса к базe данных СМАД'а и преобразовываем тексты
+		system("tput civis");
+                while (smad_db->get_result_row() == true) {
+			i++;
+                        text = smad_db->get_result_value(0);
+			emotion = smad_db->get_result_value(1);
+			smad_guid = smad_db->get_result_value(2);
+			date = smad_db->get_result_value(3);
+                        text_start = text.begin();
+                        text_end = text.end();
+			
+			// Регуляркой забираем только слова на русском языке и убираем все знаки препинания
+                        while (u32regex_search(text_start, text_end, result, u32rx)) {
+                                clear_text << result[1] << " ";
+                                text_start = result[1].second;
+                        }
+			// В файл input заносим обработанный текст
+                        input << clear_text.str() << endl;
+			query_string = "INSERT INTO texts (original_text, pretreat_text, emotion, smad_guid, date) VALUES ('" 
+					+ text + "', '" + clear_text.str() + "', " + emotion + ", '" + smad_guid + "', '" + date + "');";
+                        dict_db->query(query_string);
+			dict_db->delete_result();
+			clear_text.str("");
+			cout << "\rPorcessed texts: " << i;
+                }
+		system("tput cnorm");
+
+		cout << endl;
+                input.close();
+		smad_db->delete_result();
+		// Больше база данных СМАД'а нам не нужна, отключаемся
+                smad_db->close();
+            
+		// Прогоняем тексты из input через mystem, результаты пишем output 
+		cout << "Mystem: start mysteming texts" << endl;
+		system("mystem -cwld /opt/opinion_miner/input /opt/opinion_miner/output");
+		cout << "Mystem: finished mysteming texts" << endl;
+	
+		// Читаем output и заносим обработанные mystem'ом тексты в базу
+		output.open("/opt/opinion_miner/output");
+		query_string = "BEGIN;\n";
+		i = dictionary_size;
+		while (getline(output, text)) {
+			i++;
+			text_start = text.begin();
+                        text_end = text.end();
+			// Регуляркой убераем {} оставленные mystem'ом
+			while (u32regex_search(text_start, text_end, result, u32rx)) {
+                                clear_text << result[1] << " ";
+                                text_start = result[1].second;
+                        }
+			query_string += "UPDATE texts SET mystem_text = '" 
+					+ clear_text.str() + "' WHERE text_id = " + to_string(i) + ";\n";
+			clear_text.str("");
+			cout << "\rInserted mystem texts to database: " << i;
+		}
+		cout << endl;
+		// Отправлем в базу сразу несколько запросов через BEGIN -> COMMIT
+		query_string += "COMMIT;";
+		dict_db->query(query_string);
+		dict_db->delete_result();
+		// Закончиили формирования таблицы texts
+		dict_db->close();
+        }
+}
+
 void process::fill_db_with_training_set_from_file()
 {
-	bool is_text = false;
+	bool is_text = false,
+	     is_emotion = false,
+	     is_date = false;
 	
 	size_t i = 0;
 	string some_data;
-        string text, smad_guid, emotion;
+        string text, smad_guid, emotion, date = "";
         string::const_iterator text_start;
         string::const_iterator text_end;
         stringstream clear_text;
@@ -174,23 +284,35 @@ void process::fill_db_with_training_set_from_file()
 				some_data = some_data.erase(some_data.length() - 1);
 			}
 			if (some_data == "text") {
+				is_date = false;
 				is_text = true;
 			}
 			else if (some_data == "emot") {
 				is_text = false;
+				is_emotion = true;
+			}
+			else if (some_data == "date") {
+				is_emotion = false;
+				is_date = true;
 			}
 			else {
 				if (is_text == true) {
 					text += some_data + "\n";
 				}
-				else if (is_text == false) {
+				else if (is_emotion == true) {
 					emotion = some_data;
 				}
+				else if (is_date == true) {
+					date = some_data;
+				}
 			}
-			if (is_text == false && some_data != "emot") {
+			if (is_date == true && some_data != "date") {
 				i++;
                         	text_start = text.begin();
                         	text_end = text.end();
+				if (date == "") {
+					cout << "ATTENTION! " << i << endl;
+				}
 				// Регуляркой забираем только слова на русском языке и убираем все знаки препинания
                         	while (u32regex_search(text_start, text_end, result, u32rx)) {
                                 	clear_text << result[1] << " ";
@@ -202,8 +324,8 @@ void process::fill_db_with_training_set_from_file()
 				// не забыть про smad_guid
 				//========================
 				smad_guid = "NULL";
-				query_string = "INSERT INTO texts (original_text, pretreat_text, emotion, smad_guid) VALUES ('" 
-						+ text + "', '" + clear_text.str() + "', " + emotion + ", '" + smad_guid + "');";
+				query_string = "INSERT INTO texts (original_text, pretreat_text, emotion, date, smad_guid) VALUES ('" 
+						+ text + "', '" + clear_text.str() + "', " + emotion + ", '" + date + "', '" + smad_guid + "');";
                         	dict_db->query(query_string);
 				dict_db->delete_result();
 				clear_text.str("");
@@ -287,7 +409,7 @@ void process::fill_db_with_n_gramms ()
 		
 		query_string = "SELECT texts.mystem_text, texts.emotion, texts.text_id FROM texts ORDER BY text_id;";
 		dict_db->query(query_string);
-		for (int i = 0; i < texts_count; i++) {
+		for (size_t i = 0; i < texts_count; i++) {
 			text = dict_db->get_value(i, 0);
 			current_text_emotion = dict_db->get_int_value(i, 1);
 			current_text_id = dict_db->get_int_value(i, 2);
@@ -550,6 +672,189 @@ void process::calculate_vector_space ()
 		vector_space_file.close();
 	}
 }
+
+void process::calculate_vector_space_from_smad_texts ()
+{
+	unsigned int in_this_text_ngramms = 0,
+		     texts_count = 0;
+
+	double tf = 0, tf_idf = 0;
+	double d = 0;			//нормализация
+	
+	size_t i = 0;
+	size_t error = 0;
+	
+	string last_date = "";
+	string query_string = "";
+	string text = "";
+	string n_gramm = "";
+
+	string::const_iterator text_start;
+        string::const_iterator text_end;
+	
+	stringstream clear_text;
+
+	char_separator<char> sep(" ");
+
+	//unordered_map<unsigned int, unordered_map<string, string>> texts = new unordered_map<unsigned int, unordered_map<string, string>>;
+	unordered_map<unsigned int, unordered_map<string, string>> texts;
+        unordered_map<string, string> text_params;
+        typedef pair<unsigned int, unordered_map<string, string>> new_text;
+
+	unordered_map<string, int> n_gramms;
+	
+	fstream last_date_file;
+	ofstream input;
+	ifstream output;
+	ofstream vector_space_file;
+	
+	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
+        smatch result;	
+	
+	mysql_connect* smad_db = new mysql_connect (config->smad_db_host,
+                                                    config->smad_db_name,
+                                                    config->smad_db_user,
+                                                    config->smad_db_pass);
+
+	pgsql_connect* dict_db = new pgsql_connect (config->dict_db_host,
+                                                    config->dict_db_name,
+                                                    config->dict_db_user,
+                                                    config->dict_db_pass,
+                                                    config->dict_db_encod);
+
+	last_date_file.open("/opt/opinion_miner/last.date");
+	getline(last_date_file, last_date);
+	worker_log << get_time() << " [ WORKER] # Find the latest date: " << last_date << endl; // Потом удалить!
+	last_date_file.close();
+	
+	if (smad_db->connect() == true && dict_db->connect() == true) {
+		// Добавь 'myemote is not null and ' для тестирования на обучающей выборке
+		if (config->texts_limit == -1) {
+			query_string = "select tmp_news.text, tmp_news.guid, tmp_news.date from tmp_news where date >= '" + last_date + "';";
+			worker_log << get_time() << " [ WORKER] # Select all texts from SMAD database" << endl;
+		}
+                else {
+			query_string = "select tmp_news.text, tmp_news.guid, tmp_news.date from tmp_news where date >= '" + last_date + "' limit " + to_string(config->texts_limit) + ";";
+			worker_log << get_time() << " [ WORKER] # Select " << config->texts_limit << " texts from SMAD database" << endl;
+		}
+		smad_db->query(query_string);
+		input.open("/opt/opinion_miner/input");
+		while (smad_db->get_result_row() == true) {
+			i++;
+			text = smad_db->get_result_value(0);
+			text_start = text.begin();
+                        text_end = text.end();
+			// Регуляркой забираем только слова на русском языке и убираем все знаки препинания
+                        while (u32regex_search(text_start, text_end, result, u32rx)) {
+                                clear_text << result[1] << " ";
+                                text_start = result[1].second;
+                        }
+			input << clear_text.str() << endl;
+                        texts[i]["guid"] = smad_db->get_result_value(1);
+                        texts[i]["date"] = smad_db->get_result_value(2);
+                        //texts.insert(new_text(i, text_params));
+			last_date = smad_db->get_result_value(2);
+			clear_text.str("");
+		}
+		input.close();
+		// БД СМАД'а нам больше не понадобится отключаемся
+		smad_db->delete_result();
+		smad_db->close();
+
+		// Прогоняем тексты из input через mystem, результаты пишем output
+		system("mystem -cwld /opt/opinion_miner/input /opt/opinion_miner/output");
+		vector_space_file.open(config->v_space_file_name);
+		output.open("/opt/opinion_miner/output");
+		worker_log << get_time() << " [ WORKER] # Processed by using <mystem> " << i << " texts" << endl;
+	
+		worker_log << get_time() << " [ WORKER] # Create a vector space: ";	
+		i = 0;
+		//for (auto &this_text: *texts) {
+		while (getline(output, text)) {
+			i++;
+			//getline(output, text);
+			text_start = text.begin();
+                        text_end = text.end();
+			while (u32regex_search(text_start, text_end, result, u32rx)) {
+                                clear_text << result[1] << " ";
+                                text_start = result[1].second;
+                        }
+			text = clear_text.str();
+			clear_text.str("");
+			if (text != "") {
+			tokenizer<char_separator<char>>* words = new tokenizer<char_separator<char>>(text, sep);
+
+			query_string = "SELECT dictionary.n_gramm_id, dictionary.idf, dictionary.n_gramm FROM dictionary WHERE n_gramm IN (";
+
+			// Формируем N-GRAMM'ы
+			auto last_word = words->end();
+			auto next_word = words->begin();
+
+			do {
+				auto buff_word = next_word;
+				for (size_t j = 1; j <= config->n_gramm_size; j++) {
+					// Формируем очередную N-грамму
+					n_gramm += *buff_word;
+					// Записываем N-грамму в SQL запрос					
+					query_string += "'" + n_gramm + "',";
+					// Считаем сколько раз встретилась каждая N-грамма
+					n_gramms[n_gramm]++;
+
+					n_gramm += " "; ++buff_word;
+
+					if (buff_word == last_word) break;
+				}
+				n_gramm = ""; ++next_word;
+			} while (next_word != words->end());
+			delete words;
+			
+			// Удалим лишнюю запятую в конце строки
+			query_string = query_string.erase(query_string.length() - 1);
+			query_string += ") ORDER BY dictionary.n_gramm_id;";
+			dict_db->query(query_string);
+
+			// Найдём коэффициент для нормализации для каждой N-граммы
+			for (size_t i = 0; i < dict_db->rows_count(); i++) {
+				in_this_text_ngramms++;
+				d += pow(dict_db->get_double_value(i, 1), 2);
+			}	
+			d = sqrt(d);
+			
+			// Записываем guid в начале каждого вектора
+			vector_space_file << texts[i]["guid"];	
+
+			//j = 0;
+			for (size_t i = 0; i < dict_db->rows_count(); i++) {
+				//----TF----//
+				tf = n_gramms[dict_db->get_value(i, 2)] / (double)in_this_text_ngramms;
+				//----TF-IDF----//
+				if (config->use_tf == true)
+                                        tf_idf = dict_db->get_double_value(i, 1) * tf;
+                                else
+                                        tf_idf = dict_db->get_double_value(i, 1);
+
+                                vector_space_file << "\t" << dict_db->get_int_value(i, 0) << ":" << (tf_idf * d);
+			}
+			vector_space_file << endl;
+			n_gramms.clear();
+                        dict_db->delete_result();
+                        in_this_text_ngramms = 0;
+			}
+			else {
+				error++;
+				error_log << get_time() << " Error in text with guid = " <<  texts[i]["guid"] << endl;
+			}
+		}
+		output.close();
+		vector_space_file.close();
+		worker_log << "finished " << i << " texts with error " << error << endl;
+		// Записываем новую дату в last.date
+		last_date_file.open("/opt/opinion_miner/last.date");
+		last_date_file << last_date;
+		last_date_file.close();
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////
 //					SVM functions					//
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -591,6 +896,36 @@ void process::start_svm_predict()
 		
 	svm_check_probability_model(model);
 	predict(&config->v_space_file_name[0], strcat(result_file_name, get_time()));
+	svm_free_and_destroy_model(&model);
+	free(v_space);
+}
+
+void process::start_calc_emotion()
+{
+	size_t i = 0;
+	string query_string = "";
+	mysql_connect* smad_db = new mysql_connect (config->smad_db_host,
+                                                    config->smad_db_name,
+                                                    config->smad_db_user,
+                                                    config->smad_db_pass);
+
+	calculate_vector_space_from_smad_texts();	
+	model = svm_load_model(&config->model_file_name[0]);
+	v_space = new svm_node[max_nr_attr];
+	svm_check_probability_model(model);
+	predict_to_query(&config->v_space_file_name[0]);
+	if (smad_db->connect() == true) {
+		worker_log << get_time() << " [ WORKER] # Rated: ";
+		smad_db->query("select count(tmp_news.guid) from tmp_news where temote is not null;");
+		smad_db->get_result_row();
+		worker_log << smad_db->get_result_value(0) << " from ";
+		smad_db->delete_result();
+		smad_db->query("select count(tmp_news.guid) from tmp_news;");
+		smad_db->get_result_row();
+		worker_log << smad_db->get_result_value(0) << " texts" << endl;
+		smad_db->delete_result();
+		smad_db->close();
+	}
 	svm_free_and_destroy_model(&model);
 	free(v_space);
 }
@@ -878,6 +1213,80 @@ void process::predict(char* v_space_file_name, char* result_file_name)
 	result_file.close();	
 }
 
+void process::predict_to_query(char* v_space_file_name)
+{
+	int total = 0;
+	fstream v_space_file;
+
+	string line = "";
+	string query_string = "";
+	
+	v_space_file.open(v_space_file_name);
+
+	size_t texts_count = 0;
+
+	mysql_connect* smad_db = new mysql_connect (config->smad_db_host,
+                                                    config->smad_db_name,
+                                                    config->smad_db_user,
+                                                    config->smad_db_pass);
+
+	// Считаем сколько текстов в файле векторного пространства
+	while (getline(v_space_file, line)) texts_count++;
+
+	// переоткроем файл с векторами
+	v_space_file.close(); v_space_file.open(v_space_file_name);
+
+	worker_log << get_time() << " [ WORKER] # Calculate of emotional tonality: ";
+	if (smad_db->connect() == true) {	
+		while (getline(v_space_file, line)) {
+			int i = 0;
+			int 	predict_label;
+			char *idx, *val, *guid, *endptr;
+			int inst_max_index = -1;	// strtol gives 0 if wrong format, and precomputed kernel has <index> start from 0
+			
+			// Забираем из начала строки guid
+			guid = strtok(&line[0], " \t\n");
+
+			// Проверим не пустая ли строка нам попалась
+			if (guid == nullptr)
+				exit_input_error(total + 1);
+			
+			while (true) {
+				if (i >= max_nr_attr - 1) {
+					max_nr_attr *= 2;
+					v_space = (struct svm_node *) realloc(v_space, max_nr_attr*sizeof(struct svm_node));
+				}
+				
+				idx = strtok(nullptr, ":");	// Вытаскиваем очередной индекс признака из вектора
+				val = strtok(nullptr, " \t");	// Вытаскиваем очередное значение признака из вектора
+				if (val == nullptr) break;	// Конец вектора
+				errno = 0;
+				// Конвертируем в long int индекс и записываем в структуру v_space
+				v_space[i].index = (int)strtol(idx, &endptr, 10);
+				if (endptr == idx || errno != 0 || *endptr != '\0' || v_space[i].index <= inst_max_index)
+					exit_input_error(total + 1);
+				else
+					inst_max_index = v_space[i].index;
+
+				errno = 0;
+				// Конвертируем в double значние и записываем в структуру v_space
+				v_space[i].value = strtod(val, &endptr);
+				if (endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr)))
+					exit_input_error(total + 1);
+
+				++i;
+			}
+			v_space[i].index = -1;
+			// Получаем значение эмоциональной тональности для данного текста
+			predict_label = svm_predict(model, v_space);
+			query_string = "update tmp_news set tmp_news.temote = " + to_string(predict_label) + " where tmp_news.guid = '" + string(guid) + "';";
+			smad_db->query(query_string);
+		}
+	}
+	worker_log << "finished with error 0" << endl;
+	v_space_file.close();
+}
+
 void process::get_svm_parameters() 
 {
 	param.svm_type = config->svm_type;
@@ -932,7 +1341,7 @@ char* process::get_time ()
 {
 	time_t rawtime;
         struct tm* timeinfo;
-        char* _buffer;
+        char* _buffer = new char[17];
 
         time (&rawtime);
         timeinfo = localtime (&rawtime);

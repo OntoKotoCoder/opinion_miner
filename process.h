@@ -12,12 +12,15 @@ private:
 public:
 	process ();
 	void fill_db_with_training_set();
+	void update_db_with_training_set();
 	void fill_db_with_training_set_from_file();
 	void fill_db_with_n_gramms();
 	void calculate_idf();
 	void calculate_vector_space();
 	void start_svm_train();
 	void start_svm_predict();
+	// Daemo processes
+	void start_calc_emotion();
 
 private:
 	struct svm_parameter param;
@@ -25,7 +28,13 @@ private:
 	struct svm_model *model;
 	struct svm_node *v_space;
 	int max_nr_attr = 256;
+	ofstream error_log;
+        ofstream worker_log;
 
+	// Daemo processes
+	void calculate_vector_space_from_smad_texts();	
+	void predict_to_query(char* v_space_file_name);	
+	
 	void predict(char* v_space_file_name, char* result_file_name);
 	void read_v_space_file(string v_space_file_name);
 	void get_svm_parameters();

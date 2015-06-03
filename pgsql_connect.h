@@ -1,30 +1,35 @@
+#include <iostream>
+#include <cstdlib>
 #include <string>
-#include <fstream>
+#include <sstream>
+#include <fstream>		
+#include <ctime>
 
-#include "postgresql/libpq-fe.h"
+#include "postgresql/libpq-fe.h"	//для работы с PostgreSQL
+
+#include "get_parameters.h"
 
 using namespace std;
 
 class pgsql_connect
 {
 private:
-	PGconn *conn;
-	PGresult *query_result;
+	PGconn 		*connection;
+	PGresult 	*query_result;
 
 	string  db_params,
-		db_name,
-		db_host;
+			db_name,
+			db_host;
 
 	ofstream query_log;
 	ofstream worker_log;
-public:
+
+public:	
 	bool connect_error;
-        bool query_error;
+	bool query_error;
 
-	pgsql_connect ( string new_db_host, string new_db_name,
-			string new_db_user, string new_db_pass,
-			string new_db_encod );
-
+	pgsql_connect (get_parameters* config);
+	~pgsql_connect ();
 	bool connect ();
 	void query (string query_string);
 	unsigned int rows_count ();

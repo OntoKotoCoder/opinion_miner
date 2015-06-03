@@ -1,35 +1,34 @@
-#include <iostream>
-#include <cstdlib>
-#include <string>
-#include <sstream>
-#include <ctime>
-
 #include "pgsql_connect.h"
 
-using namespace std;
-
-pgsql_connect::pgsql_connect (string new_db_host, string new_db_name,
-                              string new_db_user, string new_db_pass,
-                              string new_db_encod)
+//pgsql_connect::pgsql_connect (get_parameters* config, string new_db_host, string new_db_name,
+//                              string new_db_user, string new_db_pass,
+//                              string new_db_encod)
+pgsql_connect::pgsql_connect (get_parameters* config)
 {
-	db_params = "host = " + new_db_host +
-		    " dbname = " + new_db_name +
-		    " user = " + new_db_user +
-		    " password = " + new_db_pass +
-		    " client_encoding = " + new_db_encod;
+	db_params = "host = " + config->dict_db_host +
+				" dbname = " + config->dict_db_name +
+				" user = " + config->dict_db_user +
+				" password = " + config->dict_db_pass +
+				" client_encoding = " + config->dict_db_encod;
 	
-	db_host = new_db_host;
-	db_name = new_db_name;
+	db_host = config->dict_db_host;
+	db_name = config->dict_db_name;
 	
-	query_log.open("/var/log/opinion_miner/query.log", fstream::app);
-	worker_log.open("/var/log/opinion_miner/worker.log", fstream::app);
+	query_log.open(config->query_log, fstream::app);
+	worker_log.open(config->worker_log, fstream::app);
+}
+
+pgsql_connect::~pgsql_connect ()
+{
+	//free(connection);
+    //free(query_result);
 }
 
 bool pgsql_connect::connect ()
 {
-	conn = PQconnectdb(&db_params[0]);
-	if (PQstatus(conn) != CONNECTION_OK) {
-		worker_log << get_time() << " [  PGSQL] # ERROR: " << PQerrorMessage(conn) << endl;
+	connection = PQconnectdb(&db_params[0]);
+	if (PQstatus(connection) != CONNECTION_OK) {
+		worker_log << get_time() << " [  PGSQL] # ERROR: " << PQerrorMessage(connection) << endl;
 		return false;
 	}
 	else {
@@ -41,10 +40,10 @@ bool pgsql_connect::connect ()
 void pgsql_connect::query (string query_string)
 {
 	query_error = false;
-	query_result = PQexec(conn, &query_string[0]);
+	query_result = PQexec(connection, &query_string[0]);
 
 	stringstream error_message;
-        error_message << PQerrorMessage(conn);
+        error_message << PQerrorMessage(connection);
 
 	if (error_message.str() != "") {
 		query_error = true;
@@ -79,17 +78,17 @@ void pgsql_connect::delete_result ()
 
 void pgsql_connect::close ()
 {
-	PQfinish(conn);
+	PQfinish(connection);
 	worker_log << get_time() << " [  PGSQL] # Connection to '" + db_host + "@" + db_name + "' closed" << endl;
 }
 
 void pgsql_connect::clear_table (string table_name)
 {
 	string query_string = "TRUNCATE TABLE " + table_name + ";";
-	query_result = PQexec(conn, &query_string[0]);
+	query_result = PQexec(connection, &query_string[0]);
 	
 	stringstream error_message;
-	error_message << PQerrorMessage(conn);	
+	error_message << PQerrorMessage(connection);	
 	
 	if (error_message.str() != "") {
 		cout << " [  PGSQL] " << error_message.str();	
@@ -102,10 +101,10 @@ void pgsql_connect::clear_table (string table_name)
 void pgsql_connect::set_to_zero (string sequence_name)
 {
 	string query_string = "SELECT pg_catalog.setval('" + sequence_name +"', 0, true);";
-	query_result = PQexec(conn, &query_string[0]);
+	query_result = PQexec(connection, &query_string[0]);
 
 	stringstream error_message;
-        error_message << PQerrorMessage(conn);
+        error_message << PQerrorMessage(connection);
 
         if (error_message.str() != "") {
                 cout << " [  PGSQL] " << error_message.str();
@@ -119,7 +118,7 @@ int pgsql_connect::table_size (string table_name)
 {
 	int size = 0;
 	string query_string = "SELECT COUNT(*) FROM " + table_name + ";";
-	query_result = PQexec(conn, &query_string[0]);
+	query_result = PQexec(connection, &query_string[0]);
 
 	size = atoi(PQgetvalue(query_result, 0, 0));
 	PQclear(query_result);
@@ -133,8 +132,8 @@ string pgsql_connect::last_date (string table_name, string column_name)
 	stringstream error_message;
 	string date = "";
 	
-	query_result = PQexec(conn, &query_string[0]);
-	error_message << PQerrorMessage(conn);
+	query_result = PQexec(connection, &query_string[0]);
+	error_message << PQerrorMessage(connection);
 
 	if (error_message.str() != "") {
 		query_log << get_time() << " " << error_message.str() << endl;

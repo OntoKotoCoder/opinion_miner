@@ -10,8 +10,7 @@
 
 using namespace std;
 
-const char* config_path = "/opt/opinion_miner/general.cfg";
-get_parameters*  config = new get_parameters(config_path);
+get_parameters* config = new get_parameters("/opt/opinion_miner/general.cfg");
 
 int main (int argc, char **argv) 
 {
@@ -25,8 +24,8 @@ int main (int argc, char **argv)
 	     do_calc_emotion = false;
 
 	config->get_general_params();
-	config->get_smad_db_params();
-	config->get_dict_db_params();
+	config->get_servers_params();
+	config->get_directories_params();
 	config->get_svm_params();
 
 	int option;
@@ -65,7 +64,7 @@ int main (int argc, char **argv)
 				break;		
 			}
 			case 'd': {
-				config->v_space_file_name = optarg;
+				config->vector_space_file_name = optarg;
 				break; 
 			}
 			case 'm': {

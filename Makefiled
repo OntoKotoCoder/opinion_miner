@@ -1,7 +1,7 @@
 CXX ?= g++
-LIBS = -lpthread -lboost_regex -licuuc -lconfig++ -lpq -lmysqlclient
+LIBS = -lpthread -lboost_regex -lboost_system -lboost_timer -licuuc -lconfig++ -lpq -lmysqlclient
 ALIBS = -Lsvm -lsvm
-CFLAGS = -std=c++11 -c -Wall
+CFLAGS = -std=c++11 -c -Wall -O3
 SHARED_LIB_FLAG = -shared -o libsvm.so.2 svm/svm.cpp
 
 all: connect

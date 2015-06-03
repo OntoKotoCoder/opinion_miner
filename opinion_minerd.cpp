@@ -2,8 +2,8 @@
 
 using namespace std;     
 
-const char* config_path = "/opt/opinion_miner/general.cfg";
-get_parameters* config = new get_parameters(config_path);
+string config_path = "/opt/opinion_miner/general.cfg";
+get_parameters* config = new get_parameters(&config_path[0]);
 
 int main(int argc, char** argv)
 {
@@ -54,7 +54,20 @@ int main(int argc, char** argv)
         close(STDIN_FILENO);
         close(STDOUT_FILENO);
         close(STDERR_FILENO);
-        
+       
+		// Тут надо регистрировать демона в gearman
+		/*const char* ghost = "127.0.0.1";
+		in_port_t gport = 4730;
+
+		gearman_worker_st* gworker = gearman_worker_create(gearman_worker_st *client);	
+		gearman_return_t gs_code = gearman_worker_add_server(gworker, ghost, gport);
+
+		const char* function_name = "opinion_minerd";
+ 		unsigned timeout = 0;
+ 		void * job_context = nullptr;
+
+		gs_code = gearman_worker_add_function(gworker,function_name, timeout, gworker_fn_demon, job_context);
+ 		*/
         // Данная функция будет осуществлять слежение за процессом
         status = MonitorProc();
         
@@ -97,9 +110,9 @@ int MonitorProc()
     sigprocmask(SIG_BLOCK, &sigset, NULL);
 
     // данная функция создаст файл с нашим PID'ом
-    SetPidFile(PID_FILE);
+    set_pid_file(PID_FILE);
 
-    workr_log.open(WORKR_LOG_FILE, fstream::app);
+    workr_log.open(config->worker_log, fstream::app);
 
     workr_log << get_time() << " [ DAEMON] # PARENT Started" << endl;
     workr_log << get_time() << " [ DAEMON] # PARENT Started a new calculation of the emotional tone" << endl;
@@ -203,7 +216,7 @@ int WorkProc()
 {
     struct sigaction	sigact;
     sigset_t		sigset;
-    int			signo;
+    //int			signo;      //на текущий момент не используется
     int			status;
 
     ofstream workr_log;
@@ -245,7 +258,7 @@ int WorkProc()
     // Установим максимальное кол-во дискрипторов которое можно открыть
     SetFdLimit(FD_LIMIT);
 
-    workr_log.open(WORKR_LOG_FILE, fstream::app);
+    workr_log.open(config->worker_log, fstream::app);
     
     // запускаем все рабочие потоки
     status = InitWorkThread();
@@ -292,8 +305,8 @@ int WorkProc()
 int LoadConfig()
 {
         config->get_general_params();
-        config->get_smad_db_params();
-        config->get_dict_db_params();
+        config->get_directories_params();
+        config->get_servers_params();
         config->get_svm_params();
         return 1;
 }
@@ -302,7 +315,6 @@ int LoadConfig()
 int InitWorkThread()
 {
     process* proc = new process();
-    // код функции
     proc->start_calc_emotion();
     delete proc;
     return 1;
@@ -312,10 +324,9 @@ int InitWorkThread()
 // и внесет нужные поправки в работу
 int ReloadConfig()
 {
-        // код функции
         config->get_general_params();
-        config->get_smad_db_params();
-        config->get_dict_db_params();
+        config->get_directories_params();
+        config->get_servers_params();
         config->get_svm_params();
         return 1;
 }
@@ -325,6 +336,7 @@ void DestroyWorkThread()
 {
         // тут должен быть код который остановит все потоки и
         // корректно освободит ресурсы
+        // O_o
 }
 
 static void signal_error(int sig, siginfo_t *si, void *ptr)
@@ -338,8 +350,8 @@ static void signal_error(int sig, siginfo_t *si, void *ptr)
     ofstream error_log;
     ofstream workr_log;
 
-    error_log.open(ERROR_LOG_FILE, fstream::app);
-    workr_log.open(WORKR_LOG_FILE, fstream::app);
+    error_log.open(config->error_log, fstream::app);
+    workr_log.open(config->worker_log, fstream::app);
 
     // запишем в лог что за сигнал пришел
     //WriteLog("[DAEMON] Signal: %s, Addr: 0x%0.16X\n", strsignal(sig), si->si_addr);
@@ -387,8 +399,8 @@ static void signal_error(int sig, siginfo_t *si, void *ptr)
 
 int SetFdLimit(int MaxFd)
 {
-    struct rlimit lim;
-    int          status;
+    struct 	rlimit lim;
+    int		status;
 
     // зададим текущий лимит на кол-во открытых дискриптеров
     lim.rlim_cur = MaxFd;
@@ -401,11 +413,11 @@ int SetFdLimit(int MaxFd)
     return status;
 }
 
-void SetPidFile(char* Filename)
+void set_pid_file(const char* Filename)
 {
     ofstream pid_file;
-
-    pid_file.open(PID_FILE);
+	string pid_file_name = "/opt/opinion_miner/opinion_minerd.pid";
+    pid_file.open(pid_file_name);
     if (pid_file.is_open())
     {
         pid_file << getpid();

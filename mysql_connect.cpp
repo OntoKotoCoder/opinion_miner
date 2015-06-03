@@ -1,21 +1,14 @@
-#include <iostream>
-#include <sstream>
-#include <string>
-
 #include "mysql_connect.h"
 
-using namespace std;
-
-mysql_connect::mysql_connect (string new_db_host, string new_db_name,
-			      string new_db_user, string new_db_pass)
+mysql_connect::mysql_connect (get_parameters* config)
 {
-	db_host = new_db_host;
-	db_name = new_db_name;
-	db_user = new_db_user;
-	db_pass = new_db_pass;
+	db_host = config->smad_db_host;
+	db_name = config->smad_db_name;
+	db_user = config->smad_db_user;
+	db_pass = config->smad_db_pass;
 
-	query_log.open("/var/log/opinion_miner/query.log", fstream::app);
-        worker_log.open("/var/log/opinion_miner/worker.log", fstream::app);
+	query_log.open(config->query_log, fstream::app);
+	worker_log.open(config->worker_log, fstream::app);
 }
 
 bool mysql_connect::connect ()

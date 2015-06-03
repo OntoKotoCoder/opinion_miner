@@ -1,8 +1,6 @@
 #include "get_parameters.h"
 
-using namespace std;
-
-get_parameters::get_parameters (const char* config_file_name)
+get_parameters::get_parameters (char* config_file_name)
 {
 	config_file = config_file_name;
 	texts_limit = 0;
@@ -16,25 +14,41 @@ void get_parameters::get_general_params ()
 	n_gramm_size = get_int_param("general.n-gramm_size");
 	number_of_classes = get_int_param("general.number_of_classes");
 	use_tf = get_bool_param("general.calculate_with_tf");
-	v_space_file_name = get_param("general.vector_space_file");
-	model_file_name = get_param("general.model_file");
 }
 
-void get_parameters::get_smad_db_params () 
+void get_parameters::get_directories_params ()
 {
-	smad_db_host = get_param("smad_db.host");
-	smad_db_name = get_param("smad_db.name");
-	smad_db_user = get_param("smad_db.user");
-        smad_db_pass = get_param("smad_db.password");
+	// [mystem:]
+	mystem_input = get_param("directories.mystem.input_file");
+	mystem_output = get_param("directories.mystem.output_file");
+
+	// [log:]
+	query_log = get_param("directories.log.query_log");
+	worker_log = get_param("directories.log.worker_log");
+	error_log = get_param("directories.log.error_log");
+	
+	// [data:]
+	last_date = get_param("directories.data.last_date."); 
+	vector_space_file_name = get_param("directories.data.vector_space_file");
+	model_file_name = get_param("directories.data.model_file");
 }
 
-void get_parameters::get_dict_db_params ()
+void get_parameters::get_servers_params () 
 {
-	dict_db_host = get_param("dictionary_db.host");
-	dict_db_name = get_param("dictionary_db.name");
-	dict_db_user = get_param("dictionary_db.user");
-	dict_db_pass = get_param("dictionary_db.password");
-	dict_db_encod = get_param("dictionary_db.encoding");
+	// [smad_db:]
+	smad_db_host = get_param("servers.smad_db.host");
+	smad_db_name = get_param("servers.smad_db.name");
+	smad_db_user = get_param("servers.smad_db.user");
+	smad_db_pass = get_param("servers.smad_db.password");
+	// [dictionary_db:]
+	dict_db_host = get_param("servers.dictionary_db.host");
+	dict_db_name = get_param("servers.dictionary_db.name");
+	dict_db_user = get_param("servers.dictionary_db.user");
+	dict_db_pass = get_param("servers.dictionary_db.password");
+	dict_db_encod = get_param("servers.dictionary_db.encoding");
+	// [gearman:]
+	gearman_host = get_param("servers.gearman.host");
+	gearman_port = get_int_param("servers.gearman.port");
 }
 void get_parameters::get_svm_params()
 {

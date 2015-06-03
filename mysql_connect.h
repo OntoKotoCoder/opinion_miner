@@ -1,32 +1,35 @@
+#include <iostream>
 #include <string>
+#include <sstream>
 #include <fstream>
 
 #include <mysql/mysql.h>
+
+#include "get_parameters.h"
 
 using namespace std;
 
 class mysql_connect
 {
 private:
-	MYSQL *connection, mysql;
-	MYSQL_RES *result;
-	MYSQL_ROW row;
+	MYSQL 		*connection, mysql;
+	MYSQL_RES	*result;
+	MYSQL_ROW	row;
+
 	int query_state;
 	
-	string   db_host,
-		 db_name,
-		 db_user,
-		 db_pass;
+	string	db_host,
+			db_name,
+			db_user,
+			db_pass;
 
 	ofstream query_log;
-        ofstream worker_log;
+	ofstream worker_log;
+
 public:
 	bool query_error;
 
-	mysql_connect ( string new_db_host,
-			string new_db_name,
-			string new_db_user,
-			string new_db_pass );
+	mysql_connect (get_parameters* config);
 	bool connect ();
 	void query (string query_string);
 	bool get_result_row ();

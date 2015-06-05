@@ -16,7 +16,7 @@
 
 #include <libgearman/gearman.h>
 
-#include "process.h"
+#include "processd.h"
  
 // лимит для установки максимально кол-во открытых дискрипторов
 #define FD_LIMIT				1024*10

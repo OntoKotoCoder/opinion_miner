@@ -58,14 +58,11 @@ int main(int argc, char** argv)
 		// Тут надо регистрировать демона в gearman
 		/*const char* ghost = "127.0.0.1";
 		in_port_t gport = 4730;
-
 		gearman_worker_st* gworker = gearman_worker_create(gearman_worker_st *client);	
 		gearman_return_t gs_code = gearman_worker_add_server(gworker, ghost, gport);
-
 		const char* function_name = "opinion_minerd";
  		unsigned timeout = 0;
  		void * job_context = nullptr;
-
 		gs_code = gearman_worker_add_function(gworker,function_name, timeout, gworker_fn_demon, job_context);
  		*/
         // Данная функция будет осуществлять слежение за процессом
@@ -314,8 +311,8 @@ int LoadConfig()
 // функция которая инициализирует рабочие потоки
 int InitWorkThread()
 {
-    process* proc = new process();
-    proc->start_calc_emotion();
+    processd* proc = new processd(config);
+    proc->calculate_tonality();
     delete proc;
     return 1;
 }

@@ -888,11 +888,6 @@ void process::start_svm_predict()
 void process::start_calc_emotion()
 {
 	string query_string = "";
-	/*mysql_connect* smad_db = new mysql_connect (config->smad_db_host,
-                                                    config->smad_db_name,
-                                                    config->smad_db_user,
-                                                    config->smad_db_pass);
-	*/
 	// Забираем из БД СМАД'а тексты и преобразуем их в вектора
 	calculate_vector_space_from_smad_texts();
 	// Загружаем модель SVM классификатора	
@@ -902,20 +897,6 @@ void process::start_calc_emotion()
 	svm_check_probability_model(model);
 	// Расчёт эмоциональной тональности и отправка значений в БД СМАД'а
 	predict_to_query(&config->vector_space_file_name[0]);
-	/*
-	if (smad_db->connect() == true) {
-		worker_log << get_time() << " [ WORKER] # Rated: ";
-		smad_db->query("select count(tmp_news.guid) from tmp_news where temote is not null;");
-		smad_db->get_result_row();
-		worker_log << smad_db->get_result_value(0) << " from ";
-		smad_db->delete_result();
-		smad_db->query("select count(tmp_news.guid) from tmp_news;");
-		smad_db->get_result_row();
-		worker_log << smad_db->get_result_value(0) << " texts" << endl;
-		smad_db->delete_result();
-		smad_db->close();
-	}
-	*/
 	// Очищаем память
 	svm_free_and_destroy_model(&model);
 	free(v_space);

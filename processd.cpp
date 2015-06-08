@@ -15,7 +15,8 @@ processd::~processd ()
 
 int processd::calculate_tonality ()
 {
-	if (create_vector_space(get_texts()) == 1) {
+	//if (create_vector_space(get_texts()) == 1) {
+	if (create_vector_space(get_last_texts()) == 1) {
 		model = svm_load_model(&config->model_file_name[0]);
 		//v_space = new svm_node[max_nr_attr];
 		svm_check_probability_model(model);
@@ -103,6 +104,77 @@ new_guids processd::get_texts ()
 		last_date_file.open(config->last_date);
 		last_date_file << last_date;
 		last_date_file.close();		
+	}
+
+	// Возвращаем список guid'ов
+	return guids;
+}
+
+// Функция забирает из базы данных SMAD тексты, прогоняет через mystem
+// На выходе файл: mystem_output с обработанными текстами и список guid'ов текстов
+new_guids processd::get_last_texts ()
+{
+	size_t i = 0;
+	string query_string = "";
+
+	string text = "";
+	stringstream clear_text;
+	string::const_iterator text_start;
+	string::const_iterator text_end;
+	new_guids guids;
+
+	ofstream mystem_input;
+
+	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
+	smatch result;
+
+	mysql_connect* smad_db = new mysql_connect (config);
+
+	if (smad_db->connect() == true) {
+		// Формируем запрос - выбираем из базы n-ое количество текстов
+		if (config->texts_limit == -1) {
+			query_string = "select tmp_news.text, tmp_news.guid \
+							from tmp_news \
+							where tmp_news.temote is null \
+							order by date desc;";
+			worker_log << get_time() << " [ WORKER] # Select all texts from SMAD database" << endl;
+		}
+		else {
+			query_string = "select tmp_news.text, tmp_news.guid, tmp_news.date \
+							from tmp_news \
+							where tmp_news.temote is null \
+							order by date desc \
+							limit " + to_string(config->texts_limit) + ";";
+			worker_log << get_time() << " [ WORKER] # Select " << config->texts_limit << " texts from SMAD database" << endl;
+		}
+		// Отправляем запроса
+		smad_db->query(query_string);
+
+		// Читаем ответ - записываем тексты в /path/to/prog/mystem_data/input
+		mystem_input.open(config->mystem_input);
+		while (smad_db->get_result_row() == true) {
+			i++;
+			text = smad_db->get_result_value(0);
+			text_start = text.begin();
+			text_end = text.end();
+			// Регуляркой забираем только слова на русском языке и убираем все знаки препинания
+			while (u32regex_search(text_start, text_end, result, u32rx)) {
+				clear_text << result[1] << " ";
+				text_start = result[1].second;
+			}
+			mystem_input << clear_text.str() << endl;
+			guids[i] = smad_db->get_result_value(1);
+			clear_text.str("");
+		}
+		mystem_input.close();
+		// БД СМАД'а нам больше не понадобится отключаемся
+		smad_db->delete_result();
+		smad_db->close();
+		delete smad_db;
+
+		// Прогоняем тексты из input через mystem, результаты пишем output
+		std::system("mystem -cwld /opt/opinion_miner/mystem_data/mystem_input /opt/opinion_miner/mystem_data/mystem_output");
+		worker_log << get_time() << " [ WORKER] # Processed by using <mystem> " << i << " texts" << endl;
 	}
 
 	// Возвращаем список guid'ов
@@ -227,11 +299,16 @@ int processd::create_vector_space (new_guids guids)
 				// Если же нам встретился пустой текст, то делаем пометку об этом в error_log
 				error++;
 				error_log << get_time() << " Error [empty text] in text with guid = " <<  guids[i] << endl;
+				// Записываем guid и 0 (текст пустой -> n-gramm 0)
+				vector_space_file << guids[i] << ":" << 0 << endl;
+
 			}
 			else if (clear_text.str() == "") {
 				// Если же нам встретился текст на английском языке, то делаем пометку об этом в error_log
 				error++;
 				error_log << get_time() << " Error [english text] in text with guid = " <<  guids[i] << endl;
+				// Записываем guid и 0 (текст анлийский -> n-gramm 0)
+				vector_space_file << guids[i] << ":" << 0 << endl;
 			}
 			// Очищаем поток с отформатированным текстом
 			clear_text.str("");
@@ -269,41 +346,41 @@ new_emotions processd::define_tonality (string vector_space_file_name)
 			guid = strtok(&line[0], ":");
 			elements = strtok(nullptr, " \t\n");
 
-			v_space = new struct svm_node[(int)strtol(elements, &endptr, 10) + 1];
-
-			// Проверим не пустая ли строка нам попалась
-			if (guid == nullptr)
-				error_log << get_time() << " Error in file: '" + vector_space_file_name + "' in line: " <<  line_num << endl;
-			
-			while (true) {
-				/*if (i >= max_nr_attr - 1) {
-					max_nr_attr *= 2;
-					v_space = (struct svm_node *) realloc(v_space, max_nr_attr*sizeof(struct svm_node));
-				}*/
-				idx = strtok(nullptr, ":");	// Вытаскиваем очередной индекс признака из вектора
-				val = strtok(nullptr, " \t");	// Вытаскиваем очередное значение признака из вектора
-				if (val == nullptr) break;	// Конец вектора
-				errno = 0;
-				// Конвертируем в long int индекс и записываем в структуру v_space
-				v_space[i].index = (int)strtol(idx, &endptr, 10);
-				if (endptr != idx || errno == 0 || *endptr == '\0' || v_space[i].index > inst_max_index) {
-					inst_max_index = v_space[i].index;
-				}
-				else {
+			if (elements != 0) {
+				v_space = new struct svm_node[(int)strtol(elements, &endptr, 10) + 1];
+				// Проверим не пустая ли строка нам попалась
+				if (guid == nullptr)
 					error_log << get_time() << " Error in file: '" + vector_space_file_name + "' in line: " <<  line_num << endl;
+				
+				while (true) {
+					idx = strtok(nullptr, ":");	// Вытаскиваем очередной индекс признака из вектора
+					val = strtok(nullptr, " \t");	// Вытаскиваем очередное значение признака из вектора
+					if (val == nullptr) break;	// Конец вектора
+					errno = 0;
+					// Конвертируем в long int индекс и записываем в структуру v_space
+					v_space[i].index = (int)strtol(idx, &endptr, 10);
+					if (endptr != idx || errno == 0 || *endptr == '\0' || v_space[i].index > inst_max_index) {
+						inst_max_index = v_space[i].index;
+					}
+					else {
+						error_log << get_time() << " Error in file: '" + vector_space_file_name + "' in line: " <<  line_num << endl;
+					}
+					errno = 0;
+					// Конвертируем в double значние и записываем в структуру v_space
+					v_space[i].value = strtod(val, &endptr);
+					if (endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr))) {
+						error_log << get_time() << " Error in file: '" + vector_space_file_name + "' in line: " <<  line_num << endl;
+					}
+					++i;
+					line_num++;
 				}
-				errno = 0;
-				// Конвертируем в double значние и записываем в структуру v_space
-				v_space[i].value = strtod(val, &endptr);
-				if (endptr == val || errno != 0 || (*endptr != '\0' && !isspace(*endptr))) {
-					error_log << get_time() << " Error in file: '" + vector_space_file_name + "' in line: " <<  line_num << endl;
-				}
-				++i;
-				line_num++;
+				v_space[i].index = -1;
+				// Получаем значение эмоциональной тональности для данного текста
+				predict_label = svm_predict(model, v_space);
 			}
-			v_space[i].index = -1;
-			// Получаем значение эмоциональной тональности для данного текста
-			predict_label = svm_predict(model, v_space);
+			else {
+				predict_label = 0;
+			}
 			emotions[string(guid)] = predict_label;
 		}
 	}

@@ -34,16 +34,16 @@ public:
 private:
 	struct svm_model *model;
 	struct svm_node *v_space;
-	//int max_nr_attr = 256;
 	ofstream error_log;
 	ofstream worker_log;
 
-	// Основные функции
+	// РћСЃРЅРѕРІРЅС‹Рµ С„СѓРЅРєС†РёРё
 	new_guids get_texts ();
+	new_guids get_last_texts ();
 	int create_vector_space (new_guids guids);
 	new_emotions define_tonality (string vector_space_file_name);
 	int send_tonality(new_emotions emotions);
 
-	// Вспомогательные функции
+	// Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅС‹Рµ С„СѓРЅРєС†РёРё
 	char* get_time ();
 };

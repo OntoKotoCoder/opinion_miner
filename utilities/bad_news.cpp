@@ -171,19 +171,13 @@ int main(int argc, char** argv)
 		smad_db->delete_result();
 		smad_db->close();
 		delete smad_db;
-		sleep(5);
-		timer.start();
-		sleep(5);
-		sec seconds = nanoseconds(timer.elapsed().wall);
-		cout << "           Time: " << seconds.count() << endl;
 		//timer.start();
-		sleep(5);
+		//sec seconds = nanoseconds(timer.elapsed().wall);
 		cout << "Results of the analysis:" << endl <<
 				"------------------------" << endl;
 		cout << "Texts processed: " << analyzed_texts << endl;
 		cout << "  English texts: " << english_texts << endl;
 		cout << "    Empty texts: " << empty_texts << endl;
-		cout << "           Time: " << ((double)timer.elapsed().wall / (double)oneSecond) << endl;
 	}
 	cout << endl;
 	delete config;

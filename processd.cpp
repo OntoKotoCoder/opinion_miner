@@ -2,9 +2,9 @@
 
 processd::processd (get_parameters* config)
 {
+	processd::config = config;
 	worker_log.open(config->worker_log, fstream::app);
 	error_log.open(config->error_log, fstream::app);
-	processd::config = config;
 }
 
 processd::~processd ()
@@ -13,10 +13,24 @@ processd::~processd ()
 	error_log.close();
 }
 
+
 int processd::calculate_tonality ()
 {
 	//if (create_vector_space(get_texts()) == 1) {
 	if (create_vector_space(get_last_texts()) == 1) {
+		model = svm_load_model(&config->model_file_name[0]);
+		//v_space = new svm_node[max_nr_attr];
+		svm_check_probability_model(model);
+		send_tonality(define_tonality(config->vector_space_file_name));
+		svm_free_and_destroy_model(&model);
+    	free(v_space);
+	}
+	return 1;
+}
+
+int processd::calculate_tonality_from_gearman (string texts)
+{
+	if (create_vector_space(get_texts_from_gearman(texts)) == 1) {
 		model = svm_load_model(&config->model_file_name[0]);
 		//v_space = new svm_node[max_nr_attr];
 		svm_check_probability_model(model);
@@ -58,22 +72,22 @@ new_guids processd::get_texts ()
 	if (smad_db->connect() == true) {
 		// Формируем запрос - выбираем из базы n-ое количество текстов
 		if (config->texts_limit == -1) {
-			query_string = "select tmp_news.text, tmp_news.guid, tmp_news.date \
-							from tmp_news \
-							where date >= '" + last_date + "' and tmp_news.temote is null;";
+			query_string = "select texts.text, texts.guid, texts.date \
+							from texts \
+							where date >= '" + last_date + "' and texts.emote2 is null;";
 			worker_log << get_time() << " [ WORKER] # Select all texts from SMAD database" << endl;
 		}
 		else {
-			query_string = "select tmp_news.text, tmp_news.guid, tmp_news.date \
-							from tmp_news \
-							where tmp_news.date >= '" + last_date + "' and tmp_news.temote is null \
+			query_string = "select texts.text, texts.guid, texts.date \
+							from texts \
+							where texts.date >= '" + last_date + "' and texts.emote2 is null \
 							limit " + to_string(config->texts_limit) + ";";
 			worker_log << get_time() << " [ WORKER] # Select " << config->texts_limit << " texts from SMAD database" << endl;
 		}
 		// Отправляем запрос
 		smad_db->query(query_string);
 
-		// Читаем ответ - записываем тексты в /path/to/prog/mystem_data/input
+		// Читаем ответ - записываем тексты в /path/to/prog/mystem_data/mystem_input
 		mystem_input.open(config->mystem_input);
 		while (smad_db->get_result_row() == true) {
 			i++;
@@ -103,7 +117,7 @@ new_guids processd::get_texts ()
 		// Записываем новую дату в last.date
 		last_date_file.open(config->last_date);
 		last_date_file << last_date;
-		last_date_file.close();		
+		last_date_file.close();
 	}
 
 	// Возвращаем список guid'ов
@@ -133,17 +147,16 @@ new_guids processd::get_last_texts ()
 	if (smad_db->connect() == true) {
 		// Формируем запрос - выбираем из базы n-ое количество текстов
 		if (config->texts_limit == -1) {
-			query_string = "select tmp_news.text, tmp_news.guid \
-							from tmp_news \
-							where tmp_news.temote is null \
-							order by date desc;";
+			query_string = "select emot_heap.text, emot_heap.id \
+							from emot_heap;";
+							//order by date desc;";
 			worker_log << get_time() << " [ WORKER] # Select all texts from SMAD database" << endl;
 		}
 		else {
-			query_string = "select tmp_news.text, tmp_news.guid, tmp_news.date \
-							from tmp_news \
-							where tmp_news.temote is null \
-							order by date desc \
+			query_string = "select eh.text, eh.id \
+							from emot_heap as eh\
+							inner join texts as t on t.id=eh.id \
+							where t.emote2 is null \
 							limit " + to_string(config->texts_limit) + ";";
 			worker_log << get_time() << " [ WORKER] # Select " << config->texts_limit << " texts from SMAD database" << endl;
 		}
@@ -181,10 +194,89 @@ new_guids processd::get_last_texts ()
 	return guids;
 }
 
+new_guids processd::get_texts_from_gearman (string texts)
+{
+	//std::locale::global(std::locale("en_US.UTF-8"));
+	size_t i = 0;
+	string query_string = "";
+
+	string text = "";
+	wstringstream clear_text;
+	wstring::const_iterator text_start;
+	wstring::const_iterator text_end;
+	new_guids guids;
+
+	wofstream mystem_input;
+	mystem_input.imbue(std::locale("en_US.UTF-8"));
+
+	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
+	//smatch result;
+	wsmatch result;
+
+
+	// Тут надо отметить сколько текстов на обработку на отправил gearman
+	worker_log << get_time() << " [ WORKER] # Select 1 text from Gearman" << endl;
+
+	// Читаем данные переданные нам Gearman'ом -> записываем тексты в /path/to/prog/mystem_data/input
+	mystem_input.open(config->mystem_input);
+
+	char *idptr, *textptr;
+
+	idptr = strtok(&texts[0], "\t");
+	textptr = strtok(nullptr, "\n");
+
+	text = string(textptr);
+	wstring w_text = utf8_to_wstring(text);
+	text_start = w_text.begin();
+	text_end = w_text.end();
+
+	// Регуляркой забираем только слова на русском языке и убираем все знаки препинания
+	while (u32regex_search(text_start, text_end, result, u32rx)) {
+		if (result.empty() == false) {
+			clear_text << result[1] << " ";
+			text_start = result[1].second;
+		}
+	}
+
+	mystem_input << clear_text.str() << endl;
+	clear_text.str(L"");
+	i++;
+	guids[i] = string(idptr);
+	
+	while (true) {
+		idptr = strtok(nullptr, "\t");
+		textptr = strtok(nullptr, "\n");
+
+		if (textptr == nullptr) break;
+
+		text = string(textptr);
+		w_text = utf8_to_wstring(text);
+		text_start = w_text.begin();
+		text_end = w_text.end();
+		
+		// Регуляркой забираем только слова на русском языке и убираем все знаки препинания
+		while (u32regex_search(text_start, text_end, result, u32rx)) {
+				clear_text << result[1] << " ";
+				text_start = result[1].second;
+		}
+
+		mystem_input << clear_text.str() << endl;
+		clear_text.str(L"");	
+		i++;
+		guids[i] = string(idptr);
+	}
+	mystem_input.close();
+	// Прогоняем тексты из input через mystem, результаты пишем output
+	std::system("mystem -cwld /opt/opinion_miner/mystem_data/mystem_input /opt/opinion_miner/mystem_data/mystem_output");
+	worker_log << get_time() << " [ WORKER] # Processed by using <mystem> " << i << " texts" << endl;
+	
+	// Возвращаем список guid'ов
+	return guids;
+}
+
 int processd::create_vector_space (new_guids guids)
 {
 	unsigned int in_this_text_ngramms = 0;
-
 	double 	tf 		= 0,
 			tf_idf 	= 0,
 			d 		= 0;			//нормализация
@@ -210,7 +302,7 @@ int processd::create_vector_space (new_guids guids)
 	u32regex u32rx = make_u32regex("([а-яА-ЯёЁ]+)");
 	smatch result;	
 
-	pgsql_connect* dict_db = new pgsql_connect (config);
+	pgsql_connect* dict_db = new pgsql_connect (config, TO_LOG);
 	
 	// Поехали
 	if (dict_db->connect() == true) {
@@ -267,7 +359,6 @@ int processd::create_vector_space (new_guids guids)
 
 				// Запрос сформирован, отправляем
 				dict_db->query(query_string);
-
 				// Найдём коэффициент для нормализации для каждой N-граммы
 				for (size_t i = 0; i < dict_db->rows_count(); i++) {
 					in_this_text_ngramms++;
@@ -288,6 +379,7 @@ int processd::create_vector_space (new_guids guids)
 						tf_idf = dict_db->get_double_value(i, 1);
 
 					vector_space_file << "\t" << dict_db->get_int_value(i, 0) << ":" << (tf_idf * d);
+					//worker_log << dict_db->get_int_value(i, 0) << endl;
 				}
 				vector_space_file << endl;
 				// Очищаем контейнер с n-gramm'ами и результат выполнения запроса
@@ -330,12 +422,11 @@ new_emotions processd::define_tonality (string vector_space_file_name)
 
 	new_emotions emotions;
 
-	fstream vector_space_file;
+	ifstream vector_space_file;
 	vector_space_file.open(vector_space_file_name);
-
 	// Рассчитываем тональность 
 	worker_log << get_time() << " [ WORKER] # Calculate of emotional tonality: ";
-	if (vector_space_file.is_open()) {	
+	if (vector_space_file.is_open()) {
 		while (getline(vector_space_file, line)) {
 			size_t i = 0;
 			int predict_label;
@@ -383,6 +474,7 @@ new_emotions processd::define_tonality (string vector_space_file_name)
 			}
 			emotions[string(guid)] = predict_label;
 		}
+		vector_space_file.close();
 	}
 	worker_log << "finished with error 0" << endl;
 	return emotions;
@@ -395,12 +487,12 @@ int processd::send_tonality(new_emotions emotions)
 
 	mysql_connect* smad_db = new mysql_connect(config);
 	if (smad_db->connect() == true) {
-		query_string = "update tmp_news set temote = case ";
+		query_string = "update texts set emote2 = case ";
 		for (auto &emotion: emotions) {
 			i ++;
-			query_string += "when guid = '" + emotion.first + "' then " + to_string(emotion.second) + " ";
+			query_string += "when id = '" + emotion.first + "' then " + to_string(emotion.second) + " ";
 		}
-		query_string += "end where guid in (";
+		query_string += "end where id in (";
 		for (auto &emotion: emotions) {
 			query_string += "'" + emotion.first + "',";
 		}
@@ -417,6 +509,11 @@ int processd::send_tonality(new_emotions emotions)
 	}
 	delete smad_db;
 	return 1;
+}
+
+std::wstring processd::utf8_to_wstring(const std::string& str)
+{
+    return utf_to_utf<wchar_t>(str.c_str(), str.c_str() + str.size());
 }
 
 char* processd::get_time ()

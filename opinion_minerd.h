@@ -7,12 +7,17 @@
 #include <string>
 #include <cstring>
 
+#include <wchar.h>
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <execinfo.h>
 #include <unistd.h>
 #include <errno.h>
 #include <wait.h>
+
+#include <boost/regex.hpp>
+#include <boost/regex/icu.hpp>
+#include <boost/locale/encoding_utf.hpp>
 
 #include <libgearman/gearman.h>
 
@@ -30,15 +35,26 @@
 //#define ERROR_LOG_FILE			"/var/log/opinion_miner/error.log"
 //#define WORKR_LOG_FILE			"/var/log/opinion_miner/worker.log"
 
+typedef unordered_map<int, string> t_texts;
+
+string TEXTS = "";
+string* TEXTS_PTR = &TEXTS;
+int TEXTS_COUNT = 0;
+int* TEXTS_COUNT_PTR = &TEXTS_COUNT;
+
 int MonitorProc ();
-int WorkProc ();
+int WorkProc (gearman_worker_st* gworker);
 
 int LoadConfig ();
 int ReloadConfig ();
-int InitWorkThread ();
+int init_work_thread (gearman_worker_st* gworker);
 void DestroyWorkThread ();
+
+void* gearman_worker_function (gearman_job_st *job, void *context, size_t *result_size, gearman_return_t *ret_ptr);
 
 void set_pid_file (const char* Filename);
 int SetFdLimit (int MaxFd);
 static void signal_error (int sig, siginfo_t *si, void *ptr);
 char* get_time ();
+std::wstring utf8_to_wstring(const std::string& str);
+std::string wstring_to_utf8(const std::wstring& w_str);
